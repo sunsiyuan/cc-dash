@@ -1,6 +1,8 @@
 # Generated ccusage exports — regenerable via bin/refresh.sh and contain
-# personal usage data (project paths, costs). Don't commit by default.
-data/
+# personal usage data (project paths, costs). Don't commit the JSON payloads.
+# data/index.json is tracked so the monthly refresh leaves a `git log` audit trail.
+data/*
+!data/index.json
 
 # OS / editor cruft
 .DS_Store
