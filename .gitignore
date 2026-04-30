@@ -1,0 +1,9 @@
+# Generated ccusage exports — regenerable via bin/refresh.sh and contain
+# personal usage data (project paths, costs). Don't commit by default.
+data/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>ccusage Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #1f2330;
+    --border: #2a2f3d;
+    --text: #e6e8ee;
+    --muted: #8a93a6;
+    --accent: #7c9cff;
+    --accent-2: #5be3c0;
+    --warn: #ffb86b;
+    --bad: #ff6b8a;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  a { color: var(--accent); }
+  code { background: #0a0c10; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  h1, h2, h3 { margin: 0 0 12px; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0; }
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 18px; }
+  .grid { display: grid; gap: 18px; }
+  .grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 900px) { .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; } }
+  .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .card .value { font-size: 22px; font-weight: 600; margin-top: 6px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .upload-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .upload-row { grid-template-columns: 1fr; } }
+  .upload-cell { background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 14px; }
+  .upload-cell.loaded { border-style: solid; border-color: var(--accent-2); }
+  .upload-cell .name { font-weight: 600; margin-bottom: 6px; }
+  .upload-cell .status { color: var(--muted); font-size: 12px; }
+  input[type="file"] { color: var(--muted); font-size: 12px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .filters label { color: var(--muted); font-size: 12px; }
+  select, button {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #0b0f1a; border-color: var(--accent); font-weight: 600; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; cursor: pointer; user-select: none; white-space: nowrap; }
+  th .arrow { color: var(--accent); margin-left: 4px; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr:hover td { background: rgba(124, 156, 255, 0.06); }
+  .chart-wrap { position: relative; height: 280px; }
+  .empty { color: var(--muted); font-style: italic; padding: 12px 0; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+  .pill { background: rgba(91, 227, 192, 0.12); color: var(--accent-2); border: 1px solid rgba(91, 227, 192, 0.3); }
+  details summary { cursor: pointer; color: var(--muted); font-weight: 500; }
+  details[open] summary { margin-bottom: 10px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  ul.insights { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  ul.insights li { padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--border); background: var(--panel-2); font-size: 13px; line-height: 1.5; }
+  ul.insights li.good { border-left-color: var(--accent-2); }
+  ul.insights li.warn { border-left-color: var(--warn); }
+  ul.insights li.bad { border-left-color: var(--bad); }
+  ul.insights li.tip { border-left-color: var(--accent); }
+  ul.insights li b { color: var(--text); }
+  ul.insights li .sub { color: var(--muted); display: block; margin-top: 2px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>ccusage Dashboard</h1>
+
+  <div class="panel">
+    <details>
+      <summary>How to export data from ccusage</summary>
+      <p>Run these commands locally, then upload the resulting JSON files below — or use <code>bin/refresh.sh</code> if you cloned the cc-dash repo:</p>
+      <pre class="mono" style="background:#0a0c10;padding:12px;border-radius:6px;overflow:auto"><code>npx ccusage@latest daily --json &gt; daily.json
+npx ccusage@latest monthly --json &gt; monthly.json
+npx ccusage@latest session --json &gt; session.json</code></pre>
+      <p style="color:var(--muted);font-size:12px;margin:0">Everything runs in your browser. No data leaves your machine. Files are also cached in <code>localStorage</code> for convenience.</p>
+    </details>
+  </div>
+
+  <div class="panel">
+    <h2>Load Data</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <button id="loadBundledBtn" class="primary">Load bundled data</button>
+      <select id="bundledMonthSelect" title="Bundled month">
+        <option value="latest">latest</option>
+      </select>
+      <span id="bundledStatus" style="color:var(--muted);font-size:12px"></span>
+    </div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px">
+      Or upload JSON files manually:
+    </div>
+    <div class="upload-row">
+      <div class="upload-cell" id="cell-daily">
+        <div class="name">daily.json</div>
+        <input type="file" accept=".json,application/json" data-kind="daily" />
+        <div class="status">No file loaded</div>
+      </div>
+      <div class="upload-cell" id="cell-monthly">
+        <div class="name">monthly.json</div>
+        <input type="file" accept=".json,application/json" data-kind="monthly" />
+        <div class="status">No file loaded</div>
+      </div>
+      <div class="upload-cell" id="cell-session">
+        <div class="name">session.json</div>
+        <input type="file" accept=".json,application/json" data-kind="session" />
+        <div class="status">No file loaded</div>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button id="clearBtn">Clear all</button>
+      <span class="badge" id="cacheBadge" style="display:none">Loaded from cache</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Filters</h2>
+    <div class="filters">
+      <label>Month
+        <select id="monthSelect"><option value="">— select —</option></select>
+      </label>
+      <label>Project
+        <select id="projectSelect"><option value="">All projects</option></select>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="modelToggle" /> Break down by model
+      </label>
+    </div>
+  </div>
+
+  <!-- Featured month summary (defaults to April of current year) -->
+  <div class="panel" id="featuredPanel">
+    <h2><span id="featuredTitle">April Totals</span></h2>
+    <div class="grid cols-4" id="featuredCards"></div>
+    <hr class="sep" />
+    <h2>Top 5 Days <span id="featuredSubTitle" style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">in April</span> by Total Tokens</h2>
+    <div id="topDaysWrap"></div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h2>Monthly Trend — Total Tokens &amp; Cost</h2>
+      <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Daily Trend — Selected Month</h2>
+      <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h2>Token Composition</h2>
+      <div class="chart-wrap"><canvas id="compChart"></canvas></div>
+      <div id="compLegend" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="panel" id="modelPanel" style="display:none">
+      <h2>By Model</h2>
+      <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Top Projects by Total Tokens</h2>
+    <div id="projectsWrap"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Top Sessions by Total Tokens</h2>
+    <div id="sessionsWrap"></div>
+  </div>
+
+  <div class="panel" id="cachePanel">
+    <h2>Cache &amp; Context Management</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
+      How well your prompt caching is working in the selected month. Cache reads cost ~10% of normal input; writes cost ~25–100% more than input — so a healthy setup needs each cache write read back several times.
+    </div>
+    <div class="grid cols-4" id="cacheCards"></div>
+    <hr class="sep" />
+    <div class="grid cols-2">
+      <div>
+        <h2>Daily Cache Hit Rate</h2>
+        <div class="chart-wrap" style="height:240px"><canvas id="cacheRateChart"></canvas></div>
+      </div>
+      <div>
+        <h2>Per-Project Cache Efficiency</h2>
+        <div id="cacheProjectsWrap"></div>
+      </div>
+    </div>
+    <hr class="sep" />
+    <h2>Insights</h2>
+    <ul id="cacheInsights" class="insights"></ul>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+// ---------- Constants ----------
+const STORAGE_KEY = "ccusage_dashboard_v1";
+const TODAY = new Date(); // for picking default featured month
+const DEFAULT_FEATURED_MONTH = (() => {
+  // Default to "April of the current year" per the spec, but if not present
+  // in monthly data, we will fall back to the latest month available.
+  const y = TODAY.getFullYear();
+  return `${y}-04`;
+})();
+
+// ---------- State ----------
+const state = {
+  rawDaily: null,
+  rawMonthly: null,
+  rawSession: null,
+  daily: [],     // normalized: {date, year, month (YYYY-MM), input, output, cacheCreate, cacheRead, total, cost, models:[{name, input, output, cacheCreate, cacheRead, total, cost}]}
+  monthly: [],   // normalized: {month, input, output, cacheCreate, cacheRead, total, cost, models:[...]}
+  sessions: [],  // normalized: {id, project, lastActivity, input, output, cacheCreate, cacheRead, total, cost}
+  filters: {
+    month: "",
+    project: "",
+    breakdownByModel: false,
+  },
+};
+
+const charts = { monthly: null, daily: null, comp: null, model: null, cacheRate: null };
+
+// ---------- Utilities ----------
+function fmtTokens(n) {
+  if (n == null || isNaN(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return String(n);
+}
+function fmtUSD(n) {
+  if (n == null || isNaN(n)) return "—";
+  return "$" + Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function num(v) {
+  const n = Number(v);
+  return isFinite(n) ? n : 0;
+}
+function get(obj, ...keys) {
+  for (const k of keys) {
+    if (obj == null) return undefined;
+    if (obj[k] !== undefined) return obj[k];
+  }
+  return undefined;
+}
+function asArray(json, ...preferKeys) {
+  if (!json) return [];
+  if (Array.isArray(json)) return json;
+  for (const k of preferKeys) {
+    if (Array.isArray(json[k])) return json[k];
+  }
+  if (Array.isArray(json.data)) return json.data;
+  // Last resort: first array-valued property
+  for (const k of Object.keys(json)) {
+    if (Array.isArray(json[k])) return json[k];
+  }
+  return [];
+}
+function normalizeMonth(s) {
+  if (!s) return "";
+  // Expecting "YYYY-MM" or "YYYY-MM-DD"
+  const m = String(s).match(/^(\d{4})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}` : String(s).slice(0, 7);
+}
+function monthLabel(m) {
+  if (!m) return "";
+  const [y, mo] = m.split("-").map(Number);
+  if (!y || !mo) return m;
+  return new Date(y, mo - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+}
+function projectFromPath(p) {
+  if (!p) return "(unknown)";
+  let s = String(p).replace(/\\/g, "/").replace(/\/$/, "");
+  // ccusage session IDs encode the project path with `/` → `-`,
+  // e.g. "-Users-siyuansun-side-fun-cc-dash". Strip the home prefix so the
+  // visible identifier is project-relative rather than the full home path.
+  if (!s.includes("/") && /^-(Users|home)-[^-]+-/.test(s)) {
+    return s.replace(/^-(Users|home)-[^-]+-/, "") || s;
+  }
+  const last = s.split("/").pop();
+  return last || s;
+}
+
+// ---------- Normalization ----------
+function normalizeRecordTokens(r) {
+  // ccusage commonly uses inputTokens / outputTokens / cacheCreationTokens / cacheReadTokens / totalTokens / totalCost
+  const input = num(get(r, "inputTokens", "input_tokens", "input"));
+  const output = num(get(r, "outputTokens", "output_tokens", "output"));
+  const cacheCreate = num(get(r, "cacheCreationTokens", "cache_creation_tokens", "cacheCreationInputTokens"));
+  const cacheRead = num(get(r, "cacheReadTokens", "cache_read_tokens", "cacheReadInputTokens"));
+  let total = num(get(r, "totalTokens", "total_tokens"));
+  if (!total) total = input + output + cacheCreate + cacheRead;
+  const cost = num(get(r, "totalCost", "costUSD", "cost_usd", "cost"));
+  return { input, output, cacheCreate, cacheRead, total, cost };
+}
+function normalizeModels(r) {
+  const arr = get(r, "modelBreakdowns", "modelBreakdown", "models", "modelsBreakdown");
+  if (!Array.isArray(arr)) return [];
+  return arr.map(m => {
+    const t = normalizeRecordTokens(m);
+    return { name: get(m, "modelName", "model", "name") || "(model)", ...t };
+  });
+}
+
+function normalizeDaily(json) {
+  const arr = asArray(json, "daily");
+  return arr.map(r => {
+    const date = String(get(r, "date", "day") || "");
+    const t = normalizeRecordTokens(r);
+    return { date, month: normalizeMonth(date), ...t, models: normalizeModels(r) };
+  }).filter(r => r.date);
+}
+function normalizeMonthly(json) {
+  const arr = asArray(json, "monthly");
+  return arr.map(r => {
+    const month = normalizeMonth(get(r, "month", "date") || "");
+    const t = normalizeRecordTokens(r);
+    return { month, ...t, models: normalizeModels(r) };
+  }).filter(r => r.month);
+}
+function normalizeSessions(json) {
+  const arr = asArray(json, "sessions");
+  return arr.map(r => {
+    const t = normalizeRecordTokens(r);
+    const id = String(get(r, "sessionId", "session_id", "id", "session") || "(session)");
+    const projectPath = get(r, "projectPath", "project_path", "project", "cwd") || "";
+    return {
+      id,
+      project: projectFromPath(projectPath || id),
+      projectPath: String(projectPath || ""),
+      lastActivity: String(get(r, "lastActivity", "last_activity", "endTime", "updatedAt") || ""),
+      ...t,
+    };
+  });
+}
+
+// ---------- Persistence ----------
+function saveCache() {
+  try {
+    const payload = {
+      daily: state.rawDaily, monthly: state.rawMonthly, session: state.rawSession,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) { /* ignore quota */ }
+}
+function loadCache() {
+  try {
+    const s = localStorage.getItem(STORAGE_KEY);
+    if (!s) return false;
+    const p = JSON.parse(s);
+    if (p.daily) ingest("daily", p.daily, /*fromCache*/true);
+    if (p.monthly) ingest("monthly", p.monthly, /*fromCache*/true);
+    if (p.session) ingest("session", p.session, /*fromCache*/true);
+    if (p.daily || p.monthly || p.session) {
+      document.getElementById("cacheBadge").style.display = "";
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+function clearAll() {
+  localStorage.removeItem(STORAGE_KEY);
+  state.rawDaily = state.rawMonthly = state.rawSession = null;
+  state.daily = []; state.monthly = []; state.sessions = [];
+  document.querySelectorAll(".upload-cell").forEach(c => {
+    c.classList.remove("loaded");
+    c.querySelector(".status").textContent = "No file loaded";
+  });
+  document.querySelectorAll('.upload-cell input[type="file"]').forEach(i => i.value = "");
+  document.getElementById("cacheBadge").style.display = "none";
+  render();
+}
+
+// ---------- Ingestion ----------
+function ingest(kind, json, fromCache) {
+  if (kind === "daily") { state.rawDaily = json; state.daily = normalizeDaily(json); }
+  if (kind === "monthly") { state.rawMonthly = json; state.monthly = normalizeMonthly(json); }
+  if (kind === "session") { state.rawSession = json; state.sessions = normalizeSessions(json); }
+  const cell = document.getElementById("cell-" + kind);
+  if (cell) {
+    cell.classList.add("loaded");
+    let count = 0;
+    if (kind === "daily") count = state.daily.length;
+    if (kind === "monthly") count = state.monthly.length;
+    if (kind === "session") count = state.sessions.length;
+    cell.querySelector(".status").textContent = `Loaded ${count} record${count === 1 ? "" : "s"}${fromCache ? " (cached)" : ""}`;
+  }
+}
+
+// ---------- Filtering ----------
+function filteredDaily() {
+  let arr = state.daily;
+  if (state.filters.month) arr = arr.filter(d => d.month === state.filters.month);
+  return arr;
+}
+function filteredSessions() {
+  let arr = state.sessions;
+  if (state.filters.project) arr = arr.filter(s => s.project === state.filters.project);
+  return arr;
+}
+
+// ---------- Rendering: Filters ----------
+function refreshFilters() {
+  const monthSel = document.getElementById("monthSelect");
+  const projSel = document.getElementById("projectSelect");
+
+  // Months: union of monthly + daily's derived months
+  const months = new Set();
+  state.monthly.forEach(m => months.add(m.month));
+  state.daily.forEach(d => months.add(d.month));
+  const monthList = Array.from(months).filter(Boolean).sort();
+  const prevMonth = state.filters.month;
+  monthSel.innerHTML = `<option value="">— all months —</option>` +
+    monthList.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join("");
+
+  // Pick default: keep prior selection if still valid; else featured (April current year) if present;
+  // else the latest available.
+  let chosen = prevMonth && monthList.includes(prevMonth) ? prevMonth : "";
+  if (!chosen && monthList.includes(DEFAULT_FEATURED_MONTH)) chosen = DEFAULT_FEATURED_MONTH;
+  if (!chosen && monthList.length) chosen = monthList[monthList.length - 1];
+  monthSel.value = chosen || "";
+  state.filters.month = chosen || "";
+
+  const projects = new Set(state.sessions.map(s => s.project));
+  const projList = Array.from(projects).filter(Boolean).sort();
+  const prevProj = state.filters.project;
+  projSel.innerHTML = `<option value="">All projects</option>` +
+    projList.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+  projSel.value = projList.includes(prevProj) ? prevProj : "";
+  state.filters.project = projSel.value;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+// ---------- Rendering: Featured Month ----------
+function renderFeatured() {
+  const monthFilter = state.filters.month;
+  // Featured month: prefer the filter-selected month so the "April Totals" card
+  // re-titles to whatever month the user picks. If no month selected, fall back
+  // to "April of current year" if present, else nothing.
+  let featured = monthFilter || (state.daily.some(d => d.month === DEFAULT_FEATURED_MONTH) ? DEFAULT_FEATURED_MONTH : "");
+  document.getElementById("featuredTitle").textContent = featured ? `${monthLabel(featured)} Totals` : "Totals (no month selected)";
+  document.getElementById("featuredSubTitle").textContent = featured ? `in ${monthLabel(featured)}` : "";
+
+  // Aggregate from daily data (preferred — same source ccusage uses to roll up)
+  const days = featured ? state.daily.filter(d => d.month === featured) : state.daily;
+  const agg = days.reduce((a, d) => {
+    a.input += d.input; a.output += d.output;
+    a.cacheCreate += d.cacheCreate; a.cacheRead += d.cacheRead;
+    a.total += d.total; a.cost += d.cost; return a;
+  }, { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0, cost: 0 });
+
+  // If daily has no rows for the month, fall back to monthly summary
+  if (days.length === 0 && featured) {
+    const m = state.monthly.find(x => x.month === featured);
+    if (m) Object.assign(agg, { input: m.input, output: m.output, cacheCreate: m.cacheCreate, cacheRead: m.cacheRead, total: m.total, cost: m.cost });
+  }
+
+  const cards = [
+    { label: "Input Tokens", value: fmtTokens(agg.input), sub: agg.input.toLocaleString() + " tokens" },
+    { label: "Output Tokens", value: fmtTokens(agg.output), sub: agg.output.toLocaleString() + " tokens" },
+    { label: "Total Tokens", value: fmtTokens(agg.total), sub: agg.total.toLocaleString() + " tokens" },
+    { label: "Cost (USD)", value: fmtUSD(agg.cost), sub: days.length + " day" + (days.length === 1 ? "" : "s") },
+  ];
+  document.getElementById("featuredCards").innerHTML = cards.map(c =>
+    `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+  ).join("");
+
+  // Top 5 days in featured month
+  const wrap = document.getElementById("topDaysWrap");
+  if (!days.length) { wrap.innerHTML = `<div class="empty">No daily data for this month.</div>`; return; }
+  const top = [...days].sort((a, b) => b.total - a.total).slice(0, 5);
+  wrap.innerHTML = renderTable(
+    [
+      { key: "date", label: "Date" },
+      { key: "input", label: "Input", num: true, fmt: fmtTokens },
+      { key: "output", label: "Output", num: true, fmt: fmtTokens },
+      { key: "cacheCreate", label: "Cache Create", num: true, fmt: fmtTokens },
+      { key: "cacheRead", label: "Cache Read", num: true, fmt: fmtTokens },
+      { key: "total", label: "Total", num: true, fmt: fmtTokens },
+      { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
+    ],
+    top,
+    { sortKey: "total", sortDir: "desc", id: "topDays" }
+  );
+}
+
+// ---------- Rendering: Charts ----------
+function destroyChart(name) {
+  if (charts[name]) { charts[name].destroy(); charts[name] = null; }
+}
+function chartTheme() {
+  return {
+    grid: "rgba(255,255,255,0.06)",
+    tick: "#8a93a6",
+    text: "#e6e8ee",
+  };
+}
+
+function renderMonthlyChart() {
+  destroyChart("monthly");
+  const ctx = document.getElementById("monthlyChart").getContext("2d");
+  // Prefer monthly.json; if absent, derive from daily.
+  let data = state.monthly.slice();
+  if (!data.length && state.daily.length) {
+    const m = new Map();
+    state.daily.forEach(d => {
+      const cur = m.get(d.month) || { month: d.month, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0, cost: 0 };
+      cur.input += d.input; cur.output += d.output;
+      cur.cacheCreate += d.cacheCreate; cur.cacheRead += d.cacheRead;
+      cur.total += d.total; cur.cost += d.cost;
+      m.set(d.month, cur);
+    });
+    data = Array.from(m.values());
+  }
+  data.sort((a, b) => a.month.localeCompare(b.month));
+  const t = chartTheme();
+
+  if (state.filters.breakdownByModel) {
+    // Stacked bar by model totals; aggregate model totals across months
+    const months = data.map(d => d.month);
+    const modelTotals = new Map(); // model -> array per month
+    data.forEach((d, i) => {
+      (d.models || []).forEach(m => {
+        if (!modelTotals.has(m.name)) modelTotals.set(m.name, new Array(months.length).fill(0));
+        modelTotals.get(m.name)[i] += m.total;
+      });
+    });
+    const colors = palette(modelTotals.size);
+    const datasets = Array.from(modelTotals.entries()).map(([name, arr], idx) => ({
+      label: name, data: arr, backgroundColor: colors[idx], stack: "tokens", yAxisID: "y",
+    }));
+    datasets.push({
+      label: "Cost (USD)", type: "line", data: data.map(d => d.cost),
+      borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 3,
+    });
+    charts.monthly = new Chart(ctx, {
+      data: { labels: months.map(monthLabel), datasets },
+      options: stackedDualAxisOptions(t),
+    });
+  } else {
+    charts.monthly = new Chart(ctx, {
+      data: {
+        labels: data.map(d => monthLabel(d.month)),
+        datasets: [
+          { type: "bar", label: "Total Tokens", data: data.map(d => d.total), backgroundColor: "#7c9cff", yAxisID: "y" },
+          { type: "line", label: "Cost (USD)", data: data.map(d => d.cost), borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 3 },
+        ],
+      },
+      options: dualAxisOptions(t),
+    });
+  }
+}
+
+function renderDailyChart() {
+  destroyChart("daily");
+  const ctx = document.getElementById("dailyChart").getContext("2d");
+  const days = filteredDaily().slice().sort((a, b) => a.date.localeCompare(b.date));
+  const t = chartTheme();
+  if (!days.length) {
+    charts.daily = new Chart(ctx, { data: { labels: [], datasets: [] }, options: dualAxisOptions(t) });
+    return;
+  }
+  if (state.filters.breakdownByModel) {
+    const labels = days.map(d => d.date.slice(5));
+    const modelTotals = new Map();
+    days.forEach((d, i) => {
+      (d.models || []).forEach(m => {
+        if (!modelTotals.has(m.name)) modelTotals.set(m.name, new Array(labels.length).fill(0));
+        modelTotals.get(m.name)[i] += m.total;
+      });
+    });
+    const colors = palette(modelTotals.size);
+    const datasets = Array.from(modelTotals.entries()).map(([name, arr], idx) => ({
+      label: name, data: arr, backgroundColor: colors[idx], stack: "tokens", yAxisID: "y",
+    }));
+    datasets.push({
+      label: "Cost (USD)", type: "line", data: days.map(d => d.cost),
+      borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 2,
+    });
+    charts.daily = new Chart(ctx, {
+      data: { labels, datasets },
+      options: stackedDualAxisOptions(t),
+    });
+  } else {
+    charts.daily = new Chart(ctx, {
+      data: {
+        labels: days.map(d => d.date.slice(5)),
+        datasets: [
+          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#5be3c0", yAxisID: "y" },
+          { type: "line", label: "Cost (USD)", data: days.map(d => d.cost), borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
+        ],
+      },
+      options: dualAxisOptions(t),
+    });
+  }
+}
+
+function renderCompositionChart() {
+  destroyChart("comp");
+  const ctx = document.getElementById("compChart").getContext("2d");
+  const days = filteredDaily();
+  const sums = days.reduce((a, d) => {
+    a.input += d.input; a.output += d.output;
+    a.cacheCreate += d.cacheCreate; a.cacheRead += d.cacheRead; return a;
+  }, { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 });
+  const labels = ["Input", "Output", "Cache Create", "Cache Read"];
+  const data = [sums.input, sums.output, sums.cacheCreate, sums.cacheRead];
+  const colors = ["#7c9cff", "#5be3c0", "#ffb86b", "#ff6b8a"];
+  const total = data.reduce((a, b) => a + b, 0);
+  charts.comp = new Chart(ctx, {
+    type: "doughnut",
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: "#1f2330", borderWidth: 2 }] },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e6e8ee" } },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmtTokens(c.parsed)} (${total ? ((c.parsed / total) * 100).toFixed(1) : 0}%)` } },
+      },
+    },
+  });
+  document.getElementById("compLegend").innerHTML = labels.map((l, i) =>
+    `${l}: <strong>${fmtTokens(data[i])}</strong> (${total ? ((data[i] / total) * 100).toFixed(1) : 0}%)`
+  ).join(" &middot; ");
+}
+
+function renderModelChart() {
+  destroyChart("model");
+  const panel = document.getElementById("modelPanel");
+  if (!state.filters.breakdownByModel) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  const ctx = document.getElementById("modelChart").getContext("2d");
+  const days = filteredDaily();
+  const totals = new Map();
+  days.forEach(d => (d.models || []).forEach(m => {
+    totals.set(m.name, (totals.get(m.name) || 0) + m.total);
+  }));
+  const entries = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+  const labels = entries.map(e => e[0]);
+  const data = entries.map(e => e[1]);
+  const colors = palette(labels.length);
+  const t = chartTheme();
+  charts.model = new Chart(ctx, {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Total Tokens", data, backgroundColor: colors }] },
+    options: {
+      indexAxis: "y", maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtTokens(c.parsed.x) } } },
+      scales: {
+        x: { ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid } },
+        y: { ticks: { color: t.tick }, grid: { color: t.grid } },
+      },
+    },
+  });
+}
+
+function dualAxisOptions(t) {
+  return {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: "#e6e8ee" } },
+      tooltip: { callbacks: { label: (c) => {
+        const v = c.parsed.y;
+        return c.dataset.yAxisID === "y1" ? `${c.dataset.label}: ${fmtUSD(v)}` : `${c.dataset.label}: ${fmtTokens(v)}`;
+      } } },
+    },
+    scales: {
+      x: { ticks: { color: t.tick }, grid: { color: t.grid } },
+      y: { position: "left", ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid }, title: { text: "Tokens", color: t.tick, display: true } },
+      y1: { position: "right", ticks: { color: t.tick, callback: v => "$" + v }, grid: { drawOnChartArea: false }, title: { text: "USD", color: t.tick, display: true } },
+    },
+  };
+}
+function stackedDualAxisOptions(t) {
+  const o = dualAxisOptions(t);
+  o.scales.x.stacked = true;
+  o.scales.y.stacked = true;
+  return o;
+}
+
+function palette(n) {
+  const base = ["#7c9cff", "#5be3c0", "#ffb86b", "#ff6b8a", "#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24", "#f87171", "#22d3ee", "#facc15"];
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(base[i % base.length]);
+  return out;
+}
+
+// ---------- Rendering: Sortable Tables ----------
+const tableState = {}; // id -> {sortKey, sortDir}
+
+function renderTable(columns, rows, opts = {}) {
+  const id = opts.id || ("tbl_" + Math.random().toString(36).slice(2));
+  if (!tableState[id]) tableState[id] = { sortKey: opts.sortKey || columns[0].key, sortDir: opts.sortDir || "desc" };
+  const ts = tableState[id];
+
+  const sorted = [...rows].sort((a, b) => {
+    const av = a[ts.sortKey], bv = b[ts.sortKey];
+    if (typeof av === "number" && typeof bv === "number") return ts.sortDir === "asc" ? av - bv : bv - av;
+    return ts.sortDir === "asc" ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+  });
+
+  const head = columns.map(c => {
+    const arrow = ts.sortKey === c.key ? `<span class="arrow">${ts.sortDir === "asc" ? "▲" : "▼"}</span>` : "";
+    return `<th class="${c.num ? "num" : ""}" data-key="${c.key}" data-id="${id}">${escapeHtml(c.label)}${arrow}</th>`;
+  }).join("");
+  const body = sorted.map(r => `<tr>${columns.map(c => {
+    const v = r[c.key];
+    const display = c.fmt ? c.fmt(v) : (v == null ? "" : escapeHtml(String(v)));
+    return `<td class="${c.num ? "num" : ""}">${display}</td>`;
+  }).join("")}</tr>`).join("");
+
+  const html = `<table data-id="${id}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  // After insertion, attach sort handlers
+  setTimeout(() => {
+    document.querySelectorAll(`table[data-id="${id}"] th`).forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-key");
+        const s = tableState[id];
+        if (s.sortKey === key) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
+        else { s.sortKey = key; s.sortDir = "desc"; }
+        // Re-render: find the wrap and replace
+        const wrap = th.closest("table").parentElement;
+        if (wrap === document.getElementById("topDaysWrap")) renderFeatured();
+        else if (wrap === document.getElementById("projectsWrap")) renderProjects();
+        else if (wrap === document.getElementById("sessionsWrap")) renderSessions();
+      });
+    });
+  }, 0);
+  return html;
+}
+
+function renderProjects() {
+  const wrap = document.getElementById("projectsWrap");
+  const sessions = filteredSessions();
+  if (!sessions.length) { wrap.innerHTML = `<div class="empty">No session data loaded.</div>`; return; }
+  const m = new Map();
+  sessions.forEach(s => {
+    const cur = m.get(s.project) || { project: s.project, sessions: 0, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0, cost: 0 };
+    cur.sessions += 1;
+    cur.input += s.input; cur.output += s.output;
+    cur.cacheCreate += s.cacheCreate; cur.cacheRead += s.cacheRead;
+    cur.total += s.total; cur.cost += s.cost;
+    m.set(s.project, cur);
+  });
+  const rows = Array.from(m.values());
+  wrap.innerHTML = renderTable(
+    [
+      { key: "project", label: "Project" },
+      { key: "sessions", label: "Sessions", num: true, fmt: v => v.toLocaleString() },
+      { key: "input", label: "Input", num: true, fmt: fmtTokens },
+      { key: "output", label: "Output", num: true, fmt: fmtTokens },
+      { key: "cacheCreate", label: "Cache Create", num: true, fmt: fmtTokens },
+      { key: "cacheRead", label: "Cache Read", num: true, fmt: fmtTokens },
+      { key: "total", label: "Total", num: true, fmt: fmtTokens },
+      { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
+    ],
+    rows,
+    { id: "projects", sortKey: "total", sortDir: "desc" }
+  );
+}
+
+function renderSessions() {
+  const wrap = document.getElementById("sessionsWrap");
+  const sessions = filteredSessions();
+  if (!sessions.length) { wrap.innerHTML = `<div class="empty">No session data loaded.</div>`; return; }
+  // Show top 25 to keep the table reasonable; sortable lets users flip.
+  const rows = [...sessions].sort((a, b) => b.total - a.total).slice(0, 25).map(s => ({
+    id: s.id.length > 30 ? s.id.slice(0, 8) + "…" + s.id.slice(-8) : s.id,
+    project: s.project,
+    lastActivity: s.lastActivity,
+    input: s.input, output: s.output,
+    cacheCreate: s.cacheCreate, cacheRead: s.cacheRead,
+    total: s.total, cost: s.cost,
+  }));
+  wrap.innerHTML = renderTable(
+    [
+      { key: "id", label: "Session" },
+      { key: "project", label: "Project" },
+      { key: "lastActivity", label: "Last Activity" },
+      { key: "input", label: "Input", num: true, fmt: fmtTokens },
+      { key: "output", label: "Output", num: true, fmt: fmtTokens },
+      { key: "cacheCreate", label: "Cache Create", num: true, fmt: fmtTokens },
+      { key: "cacheRead", label: "Cache Read", num: true, fmt: fmtTokens },
+      { key: "total", label: "Total", num: true, fmt: fmtTokens },
+      { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
+    ],
+    rows,
+    { id: "sessions", sortKey: "total", sortDir: "desc" }
+  );
+}
+
+// ---------- Cache analysis ----------
+function pct(n) { return (isFinite(n) ? (n * 100).toFixed(1) : "0.0") + "%"; }
+
+function renderCacheAnalysis() {
+  const days = filteredDaily();
+  const sums = days.reduce((a, d) => {
+    a.input += d.input; a.output += d.output;
+    a.cacheCreate += d.cacheCreate; a.cacheRead += d.cacheRead; return a;
+  }, { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 });
+
+  const inputSide = sums.input + sums.cacheRead + sums.cacheCreate;
+  const hitRate = inputSide > 0 ? sums.cacheRead / inputSide : 0;
+  const reuse = sums.cacheCreate > 0 ? sums.cacheRead / sums.cacheCreate : 0;
+  const pureInputShare = inputSide > 0 ? sums.input / inputSide : 0;
+
+  // Cards
+  const cards = [
+    { label: "Cache Hit Rate", value: pct(hitRate), sub: `${fmtTokens(sums.cacheRead)} of ${fmtTokens(inputSide)} input-side` },
+    { label: "Reuse Multiplier", value: reuse > 0 ? reuse.toFixed(1) + "×" : "—", sub: "cache reads ÷ cache writes" },
+    { label: "Cache Reads", value: fmtTokens(sums.cacheRead), sub: sums.cacheRead.toLocaleString() + " tokens" },
+    { label: "Cache Writes", value: fmtTokens(sums.cacheCreate), sub: sums.cacheCreate.toLocaleString() + " tokens" },
+  ];
+  document.getElementById("cacheCards").innerHTML = cards.map(c =>
+    `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+  ).join("");
+
+  // Daily hit-rate chart
+  destroyChart("cacheRate");
+  const ctx = document.getElementById("cacheRateChart").getContext("2d");
+  const t = chartTheme();
+  const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const labels = sortedDays.map(d => d.date.slice(5));
+  const rates = sortedDays.map(d => {
+    const total = d.input + d.cacheRead + d.cacheCreate;
+    return total > 0 ? (d.cacheRead / total) * 100 : 0;
+  });
+  charts.cacheRate = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Cache hit rate",
+        data: rates,
+        borderColor: "#5be3c0", backgroundColor: "rgba(91,227,192,0.15)",
+        tension: 0.25, pointRadius: 2, fill: true,
+      }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e6e8ee" } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
+      },
+      scales: {
+        x: { ticks: { color: t.tick }, grid: { color: t.grid } },
+        y: { ticks: { color: t.tick, callback: v => v + "%" }, grid: { color: t.grid }, suggestedMin: 0, suggestedMax: 100 },
+      },
+    },
+  });
+
+  // Per-project cache efficiency table (from sessions, respects project filter)
+  const wrap = document.getElementById("cacheProjectsWrap");
+  const sessions = filteredSessions();
+  if (!sessions.length) {
+    wrap.innerHTML = `<div class="empty">No session data for this filter.</div>`;
+  } else {
+    const m = new Map();
+    sessions.forEach(s => {
+      const cur = m.get(s.project) || { project: s.project, input: 0, cacheCreate: 0, cacheRead: 0 };
+      cur.input += s.input; cur.cacheCreate += s.cacheCreate; cur.cacheRead += s.cacheRead;
+      m.set(s.project, cur);
+    });
+    const rows = Array.from(m.values()).map(r => {
+      const totalInputSide = r.input + r.cacheCreate + r.cacheRead;
+      return {
+        project: r.project,
+        cacheWrites: r.cacheCreate,
+        cacheReads: r.cacheRead,
+        reuse: r.cacheCreate > 0 ? r.cacheRead / r.cacheCreate : 0,
+        hitRate: totalInputSide > 0 ? r.cacheRead / totalInputSide : 0,
+      };
+    });
+    wrap.innerHTML = renderTable(
+      [
+        { key: "project", label: "Project" },
+        { key: "cacheWrites", label: "Writes", num: true, fmt: fmtTokens },
+        { key: "cacheReads", label: "Reads", num: true, fmt: fmtTokens },
+        { key: "reuse", label: "Reuse", num: true, fmt: v => v > 0 ? v.toFixed(1) + "×" : "—" },
+        { key: "hitRate", label: "Hit %", num: true, fmt: v => (v * 100).toFixed(1) + "%" },
+      ],
+      rows,
+      { id: "cacheProjects", sortKey: "cacheReads", sortDir: "desc" }
+    );
+  }
+
+  // Rule-based insights
+  const tips = [];
+  if (sums.cacheCreate === 0 && sums.cacheRead === 0) {
+    tips.push({ kind: "warn", title: "No prompt caching detected.",
+      sub: "Either ccusage didn't capture cache fields, or you're using a flow that doesn't cache (very short sessions, non-Claude-Code clients)." });
+  } else {
+    // Reuse multiplier rules. Anthropic break-even is ~1.4–2.1 reads per write
+    // depending on TTL, so a 3× target gives a clear margin.
+    if (reuse >= 10) {
+      tips.push({ kind: "good", title: `Reuse multiplier is ${reuse.toFixed(1)}× — excellent.`,
+        sub: "Each cache write is read back many times. Long, focused sessions on stable file sets — keep doing whatever you're doing." });
+    } else if (reuse >= 3) {
+      tips.push({ kind: "good", title: `Reuse multiplier is ${reuse.toFixed(1)}× — healthy.`,
+        sub: "Cache is comfortably paying for itself (Anthropic break-even is ~1.4–2× depending on TTL)." });
+    } else if (reuse >= 1) {
+      tips.push({ kind: "warn", title: `Reuse multiplier is ${reuse.toFixed(1)}× — marginal.`,
+        sub: "Cache is barely paying for itself. Try to keep sessions on the same file set instead of restarting / switching scope, and avoid edits that touch many files early in a session." });
+    } else if (reuse > 0) {
+      tips.push({ kind: "bad", title: `Reuse multiplier is ${reuse.toFixed(2)}× — cache is costing more than it saves.`,
+        sub: "You're writing more cache than you read. Likely causes: very short sessions, frequent /clear, files that change between turns, or using non-cacheable model flows." });
+    }
+
+    // Hit rate rules
+    if (hitRate >= 0.7) {
+      tips.push({ kind: "good", title: `Hit rate is ${pct(hitRate)} — you're running long, sticky sessions.`,
+        sub: "Most of your input-side tokens come from cache. Great for cost; just watch out for context-rot symptoms in very long sessions." });
+    } else if (hitRate >= 0.4) {
+      tips.push({ kind: "tip", title: `Hit rate is ${pct(hitRate)} — typical Claude Code usage.`,
+        sub: "Within the normal band. Bigger upside is usually from extending session length on the same project, not from anything technical." });
+    } else if (hitRate > 0) {
+      tips.push({ kind: "warn", title: `Hit rate is ${pct(hitRate)} — heavy non-cached input.`,
+        sub: "You're sending a lot of fresh input each turn. Common causes: many tool results pasted in, frequent context switches between projects, or using /compact too aggressively." });
+    }
+
+    // Pure-input share — high values often mean tool-call heavy days
+    if (pureInputShare > 0.4) {
+      tips.push({ kind: "tip", title: `Non-cache input is ${pct(pureInputShare)} of input-side tokens.`,
+        sub: "A large share of input is fresh each turn — usually tool results (grep/bash output, file reads). Consider scoping searches more narrowly or using Read with offset/limit instead of dumping whole files." });
+    }
+
+    // Per-project outliers — flag when best vs worst differs meaningfully.
+    if (sessions.length) {
+      const pm = new Map();
+      sessions.forEach(s => {
+        const cur = pm.get(s.project) || { project: s.project, cacheCreate: 0, cacheRead: 0 };
+        cur.cacheCreate += s.cacheCreate; cur.cacheRead += s.cacheRead;
+        pm.set(s.project, cur);
+      });
+      const rows = Array.from(pm.values())
+        .filter(r => r.cacheCreate > 1e6) // ignore tiny projects to avoid noise
+        .map(r => ({ project: r.project, reuse: r.cacheRead / r.cacheCreate }));
+      if (rows.length >= 2) {
+        rows.sort((a, b) => a.reuse - b.reuse);
+        const worst = rows[0], best = rows[rows.length - 1];
+        if (best.reuse - worst.reuse >= 3) {
+          tips.push({ kind: "tip", title: `Best vs worst project: ${best.reuse.toFixed(1)}× → ${worst.reuse.toFixed(1)}×.`,
+            sub: `<b>${escapeHtml(best.project)}</b> reuses cache well; <b>${escapeHtml(worst.project)}</b> barely does. Look at what's different — session length, file churn, /clear frequency.` });
+        }
+      }
+    }
+
+    // Daily volatility — if any single day's writes > 2× the median, flag it
+    const writes = sortedDays.map(d => d.cacheCreate).filter(v => v > 0).sort((a, b) => a - b);
+    if (writes.length >= 5) {
+      const median = writes[Math.floor(writes.length / 2)];
+      const spike = sortedDays.find(d => d.cacheCreate > median * 5);
+      if (spike) {
+        tips.push({ kind: "tip", title: `Cache writes spiked on ${spike.date}.`,
+          sub: `${fmtTokens(spike.cacheCreate)} written that day vs a median of ${fmtTokens(median)}. Big spikes usually mean a fresh repo / new project that day, or many /clear-restart cycles.` });
+      }
+    }
+  }
+
+  if (!tips.length) {
+    tips.push({ kind: "tip", title: "Load some data to see insights.", sub: "Use the buttons at the top." });
+  }
+
+  document.getElementById("cacheInsights").innerHTML = tips.map(t =>
+    `<li class="${t.kind}"><b>${t.title}</b><span class="sub">${t.sub}</span></li>`
+  ).join("");
+}
+
+// ---------- Master render ----------
+function render() {
+  refreshFilters();
+  renderFeatured();
+  renderMonthlyChart();
+  renderDailyChart();
+  renderCompositionChart();
+  renderModelChart();
+  renderProjects();
+  renderSessions();
+  renderCacheAnalysis();
+}
+
+// ---------- Wire up ----------
+document.querySelectorAll('.upload-cell input[type="file"]').forEach(input => {
+  input.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const kind = e.target.getAttribute("data-kind");
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      ingest(kind, json, false);
+      saveCache();
+      render();
+    } catch (err) {
+      alert(`Could not parse ${file.name}: ${err.message}`);
+    }
+  });
+});
+// ---------- Bundled-data loading ----------
+async function fetchJson(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+}
+async function loadBundled(month) {
+  const slug = month || "latest";
+  const status = document.getElementById("bundledStatus");
+  status.textContent = `Loading ./data/${slug}/…`;
+  status.style.color = "var(--muted)";
+  try {
+    const [d, m, s] = await Promise.all([
+      fetchJson(`./data/${slug}/daily.json`),
+      fetchJson(`./data/${slug}/monthly.json`),
+      fetchJson(`./data/${slug}/session.json`),
+    ]);
+    ingest("daily", d, false);
+    ingest("monthly", m, false);
+    ingest("session", s, false);
+    saveCache();
+    render();
+    status.textContent = `Loaded ./data/${slug}/`;
+    status.style.color = "var(--accent-2)";
+  } catch (err) {
+    const isFileScheme = location.protocol === "file:";
+    status.style.color = "var(--bad)";
+    if (isFileScheme) {
+      status.textContent = "Browsers block fetch over file://. Run bin/serve.sh and reopen via http://localhost:8765/";
+    } else {
+      status.textContent = `Could not load: ${err.message}. Run bin/refresh.sh ${month && month !== "latest" ? month : ""} first?`;
+    }
+  }
+}
+async function discoverBundledMonths() {
+  // bin/refresh.sh writes data/index.json with {months: [...], latest: "YYYY-MM"}.
+  // Falls back gracefully when index.json is absent (e.g. user just dropped raw files).
+  try {
+    const idx = await fetchJson("./data/index.json");
+    const select = document.getElementById("bundledMonthSelect");
+    const months = Array.isArray(idx.months) ? idx.months.slice().sort() : [];
+    const opts = ['<option value="latest">latest' + (idx.latest ? ` (${idx.latest})` : "") + "</option>"]
+      .concat(months.map(m => `<option value="${m}">${monthLabel(m)}</option>`));
+    select.innerHTML = opts.join("");
+  } catch {
+    // No index — leave the default "latest" option in place.
+  }
+}
+document.getElementById("loadBundledBtn").addEventListener("click", () => {
+  const sel = document.getElementById("bundledMonthSelect");
+  loadBundled(sel.value);
+});
+
+document.getElementById("clearBtn").addEventListener("click", clearAll);
+document.getElementById("monthSelect").addEventListener("change", e => {
+  state.filters.month = e.target.value;
+  renderFeatured(); renderDailyChart(); renderCompositionChart(); renderModelChart();
+});
+document.getElementById("projectSelect").addEventListener("change", e => {
+  state.filters.project = e.target.value;
+  renderProjects(); renderSessions();
+});
+document.getElementById("modelToggle").addEventListener("change", e => {
+  state.filters.breakdownByModel = e.target.checked;
+  renderMonthlyChart(); renderDailyChart(); renderModelChart();
+});
+
+// ---------- Init ----------
+loadCache();
+render();
+discoverBundledMonths();
+</script>
+</body>
+</html>
