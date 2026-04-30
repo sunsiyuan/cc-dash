@@ -1,47 +1,61 @@
 # cc-dash
 
-Local static dashboard for [ccusage](https://www.npmjs.com/package/ccusage) JSON reports. Single HTML file, vanilla JS + Chart.js CDN, no backend.
+Local static dashboard for [ccusage](https://www.npmjs.com/package/ccusage) JSON reports. Single HTML file, vanilla JS + Chart.js CDN, no backend, all processing client-side.
+
+## What it shows
+
+- **Featured month totals** — input / output / total tokens + cost USD, with the top 5 days by token volume.
+- **Monthly trend** — bar (tokens) + line (cost) on dual axes.
+- **Daily trend** for the selected month, with optional model breakdown (stacked).
+- **Token composition** — input / output / cache create / cache read doughnut.
+- **Top projects** and **top sessions** tables, sortable.
+- **Cache & context-management panel** — hit rate, reuse multiplier, daily hit-rate trend, per-project cache efficiency, and rule-based insights about your context habits.
+- Filters: **month**, **project**, and **break down by model** toggle.
+- Token numbers auto-format K / M / B; data is cached in `localStorage` between reloads.
+- Tolerates ccusage shape variations (`{daily:[]}`, `{sessions:[]}`, raw arrays, `{data:[]}`, snake_case keys, etc.).
 
 ## Layout
 
 ```
 cc-dash/
-├── ccusage-dashboard.html   # the dashboard (open in a browser)
+├── ccusage-dashboard.html         # the dashboard (open via http://localhost:…)
 ├── bin/
-│   ├── refresh.sh           # regenerate JSONs for a month
-│   └── serve.sh             # python3 -m http.server, opens the dashboard
-└── data/                    # gitignored; regenerable
-    ├── 2026-04/
-    │   ├── daily.json
-    │   ├── monthly.json
-    │   └── session.json
-    └── latest -> 2026-04
+│   ├── refresh.sh                 # regenerate JSONs for a month via ccusage
+│   ├── refresh-and-commit.sh      # wrapper used by launchd; logs + commits index bumps
+│   └── serve.sh                   # python3 -m http.server + opens the dashboard
+├── launchd/
+│   └── com.example.cc-dash.refresh.plist  # template LaunchAgent (edit paths to install)
+├── data/                          # mostly gitignored; regenerable
+│   ├── index.json                 # tracked — drives the dashboard's bundled-month dropdown
+│   ├── 2026-04/                   # gitignored — actual JSONs
+│   │   ├── daily.json
+│   │   ├── monthly.json
+│   │   └── session.json
+│   ├── latest -> 2026-04          # gitignored
+│   └── refresh.log                # gitignored — launchd stdout/stderr
+└── .gitignore                     # data/* except !data/index.json
 ```
 
-## One-click load
-
-The dashboard's **Load bundled data** button fetches `./data/<month>/{daily,monthly,session}.json`. Browsers block `fetch()` over `file://`, so run a local server:
+## Quick start
 
 ```sh
 bin/serve.sh           # serves on http://localhost:8765 and opens the page
 ```
 
-You can still open `ccusage-dashboard.html` directly via `file://` and use the manual file pickers — the button just won't work in that mode.
+In the page: click **Load bundled data**, or pick files manually in the upload section. The bundled-month dropdown is populated from `data/index.json`.
+
+> Browsers block `fetch()` over `file://`, so double-clicking the HTML works for manual uploads but not for one-click load. Always go through `bin/serve.sh` for the bundled flow.
 
 ## Refresh data
 
 ```sh
 bin/refresh.sh                # current month
+bin/refresh.sh prev           # previous month (used by the LaunchAgent)
 bin/refresh.sh 2026-04        # specific month
-bin/refresh.sh prev           # previous month
 bin/refresh.sh all            # full history (no date filter)
 ```
 
-`refresh.sh` writes to `data/<YYYY-MM>/` and updates `data/latest` to point at it, so the dashboard's "Latest" preset always picks up the most recent run.
-
-## How the JSONs are produced
-
-Equivalent to:
+`refresh.sh` writes to `data/<YYYY-MM>/`, updates the `data/latest` symlink, and rebuilds `data/index.json` so the dashboard's bundled dropdown stays in sync. It is equivalent to:
 
 ```sh
 npx ccusage@latest daily   --since 20260401 --until 20260430 --json > daily.json
@@ -49,10 +63,44 @@ npx ccusage@latest monthly --since 20260401 --until 20260430 --json > monthly.js
 npx ccusage@latest session --since 20260401 --until 20260430 --json > session.json
 ```
 
-Drop the `--since`/`--until` flags for the full history.
+(Drop `--since`/`--until` for full history.)
 
-## Notes
+## Monthly auto-refresh (macOS LaunchAgent)
 
-- All processing is client-side; data never leaves the machine.
-- The dashboard caches the last loaded JSONs in `localStorage`, so reloads aren't a fresh start.
-- `data/` is gitignored on purpose — it contains personal usage data (project paths, token counts, costs).
+`bin/refresh-and-commit.sh` is a wrapper meant to be triggered by `launchd` (or cron). It runs `bin/refresh.sh prev` and commits `data/index.json` as `refresh: <month>` only when the index actually changed — so you get a clean `git log` audit trail without spurious commits.
+
+To install on a fresh Mac:
+
+```sh
+# 1. Copy the template, fix paths/label for your user, install into LaunchAgents.
+cp launchd/com.example.cc-dash.refresh.plist \
+   ~/Library/LaunchAgents/com.<yourname>.cc-dash.refresh.plist
+# Then edit the new file: replace USERNAME / Label / paths.
+
+# 2. Load it.
+launchctl bootstrap "gui/$(id -u)" \
+   ~/Library/LaunchAgents/com.<yourname>.cc-dash.refresh.plist
+
+# 3. Smoke-test it now (doesn't wait for the 1st of the month).
+launchctl kickstart -k "gui/$(id -u)/com.<yourname>.cc-dash.refresh"
+tail -f data/refresh.log
+```
+
+Schedule: 1st of each month, 09:00 **local time** (`StartCalendarInterval`). If the Mac is asleep at 09:00 launchd runs the job when it next wakes — you don't lose a month.
+
+Useful commands while running:
+
+```sh
+launchctl print     gui/$(id -u)/com.<yourname>.cc-dash.refresh    # status, schedule, paths
+launchctl list      | grep cc-dash                                  # one-line status
+launchctl kickstart -k gui/$(id -u)/com.<yourname>.cc-dash.refresh  # run now
+launchctl bootout   gui/$(id -u)/com.<yourname>.cc-dash.refresh     # disable/unload
+```
+
+To remove permanently: `launchctl bootout …` then delete the plist.
+
+## Repo conventions
+
+- `data/` is gitignored except `data/index.json` (the audit-trail file).
+- Manual commits use your normal git identity. The LaunchAgent commits use `cc-dash refresh <cc-dash-refresh@local>` so they're easy to spot in `git log`.
+- All processing in the browser is client-side; nothing leaves your machine.

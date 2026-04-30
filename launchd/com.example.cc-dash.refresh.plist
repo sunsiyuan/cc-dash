@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Template LaunchAgent for cc-dash monthly refresh.
+
+  Install:
+    1. cp this file to ~/Library/LaunchAgents/com.<yourname>.cc-dash.refresh.plist
+    2. Edit Label, ProgramArguments path, WorkingDirectory, log paths,
+       and HOME below — replace USERNAME with your macOS short username.
+    3. launchctl bootstrap "gui/$(id -u)" <path-to-plist>
+
+  Schedule below = 09:00 local on the 1st of every month.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.example.cc-dash.refresh</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>/Users/USERNAME/utils/cc-dash/bin/refresh-and-commit.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/USERNAME/utils/cc-dash</string>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Day</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/USERNAME/utils/cc-dash/data/refresh.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/USERNAME/utils/cc-dash/data/refresh.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/USERNAME</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+  </dict>
+</dict>
+</plist>
