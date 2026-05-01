@@ -4,12 +4,21 @@ Local static dashboard for [ccusage](https://www.npmjs.com/package/ccusage) JSON
 
 ## What it shows
 
+For Claude Code (via ccusage):
+
 - **Featured month totals** — input / output / total tokens + cost USD, with the top 5 days by token volume.
 - **Monthly trend** — bar (tokens) + line (cost) on dual axes.
 - **Daily trend** for the selected month, with optional model breakdown (stacked).
 - **Token composition** — input / output / cache create / cache read doughnut.
 - **Top projects** and **top sessions** tables, sortable.
 - **Cache & context-management panel** — hit rate, reuse multiplier, daily hit-rate trend, per-project cache efficiency, and rule-based insights about your context habits.
+
+For Cursor (via the cursor.com CSV export):
+
+- **Cursor activity panel** — events / total tokens / cache hit rate / reuse multiplier, daily activity (tokens + events on dual axes), per-model breakdown, top days. Honors the Month filter. Cost isn't shown — Cursor bills on a subscription so per-event cost is "Included".
+
+Shared:
+
 - Filters: **month**, **project**, and **break down by model** toggle.
 - Token numbers auto-format K / M / B; data is cached in `localStorage` between reloads.
 - Tolerates ccusage shape variations (`{daily:[]}`, `{sessions:[]}`, raw arrays, `{data:[]}`, snake_case keys, etc.).
@@ -22,17 +31,21 @@ cc-dash/
 ├── bin/
 │   ├── refresh.sh                 # regenerate JSONs for a month via ccusage
 │   ├── refresh-and-commit.sh      # wrapper used by launchd; logs + commits index bumps
+│   ├── import-cursor.sh           # stage a fresh Cursor CSV export at data/cursor/usage.csv
 │   └── serve.sh                   # python3 -m http.server + opens the dashboard
 ├── launchd/
 │   └── com.example.cc-dash.refresh.plist  # template LaunchAgent (edit paths to install)
 ├── data/                          # mostly gitignored; regenerable
 │   ├── index.json                 # tracked — drives the dashboard's bundled-month dropdown
-│   ├── 2026-04/                   # gitignored — actual JSONs
+│   ├── 2026-04/                   # gitignored — Claude Code JSONs
 │   │   ├── daily.json
 │   │   ├── monthly.json
 │   │   └── session.json
 │   ├── latest -> 2026-04          # gitignored
-│   └── refresh.log                # gitignored — launchd stdout/stderr
+│   ├── refresh.log                # gitignored — launchd stdout/stderr
+│   └── cursor/                    # gitignored — Cursor CSV exports (manual)
+│       ├── usage.csv              # the file the dashboard reads
+│       └── cursor-usage-events-*.csv  # archived dated exports
 └── .gitignore                     # data/* except !data/index.json
 ```
 
@@ -64,6 +77,22 @@ npx ccusage@latest session --since 20260401 --until 20260430 --json > session.js
 ```
 
 (Drop `--since`/`--until` for full history.)
+
+## Cursor data
+
+Cursor doesn't have a CLI export, so this is manual:
+
+1. Sign in at [cursor.com](https://cursor.com) → Settings → Usage → **Export CSV**.
+2. Drop the file into the workspace:
+
+   ```sh
+   bin/import-cursor.sh ~/Downloads/cursor-usage-events-2026-05-01.csv
+   ```
+
+   That copies the dated export into `data/cursor/` for archive and points `data/cursor/usage.csv` at it (the path the dashboard reads).
+3. Refresh the dashboard tab. **Load bundled data** auto-picks up `data/cursor/usage.csv` if present — the Cursor panel only renders when the file exists.
+
+The Cursor CSV is not month-partitioned (it's one rolling export). The dashboard filters rows by the selected month at render time, so picking April will show only April events even if the CSV spans more.
 
 ## Monthly auto-refresh (macOS LaunchAgent)
 

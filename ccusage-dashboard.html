@@ -120,6 +120,11 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
         <input type="file" accept=".json,application/json" data-kind="session" />
         <div class="status">No file loaded</div>
       </div>
+      <div class="upload-cell" id="cell-cursor">
+        <div class="name">cursor usage.csv <span class="badge" style="font-size:10px;margin-left:4px">optional</span></div>
+        <input type="file" accept=".csv,text/csv" data-kind="cursor" />
+        <div class="status">No file loaded</div>
+      </div>
     </div>
     <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button id="clearBtn">Clear all</button>
@@ -206,6 +211,28 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <ul id="cacheInsights" class="insights"></ul>
   </div>
 
+  <div class="panel" id="cursorPanel" style="display:none">
+    <h2>Cursor Activity</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
+      From <code>cursor-usage-events-*.csv</code> exported at cursor.com → Settings → Usage. Cost is "Included" under your subscription, so this view is request- and token-shaped, not dollar-shaped. Honors the Month filter at the top.
+    </div>
+    <div class="grid cols-4" id="cursorCards"></div>
+    <hr class="sep" />
+    <div class="grid cols-2">
+      <div>
+        <h2>Daily Activity</h2>
+        <div class="chart-wrap" style="height:240px"><canvas id="cursorDailyChart"></canvas></div>
+      </div>
+      <div>
+        <h2>By Model</h2>
+        <div class="chart-wrap" style="height:240px"><canvas id="cursorModelChart"></canvas></div>
+      </div>
+    </div>
+    <hr class="sep" />
+    <h2>Top Days by Total Tokens</h2>
+    <div id="cursorTopDaysWrap"></div>
+  </div>
+
 </div>
 
 <script>
@@ -226,9 +253,11 @@ const state = {
   rawDaily: null,
   rawMonthly: null,
   rawSession: null,
+  rawCursor: null, // CSV text
   daily: [],     // normalized: {date, year, month (YYYY-MM), input, output, cacheCreate, cacheRead, total, cost, models:[{name, input, output, cacheCreate, cacheRead, total, cost}]}
   monthly: [],   // normalized: {month, input, output, cacheCreate, cacheRead, total, cost, models:[...]}
   sessions: [],  // normalized: {id, project, lastActivity, input, output, cacheCreate, cacheRead, total, cost}
+  cursor: [],    // normalized: {date, month, model, kind, input, cacheCreate, cacheRead, output, total}
   filters: {
     month: "",
     project: "",
@@ -236,7 +265,7 @@ const state = {
   },
 };
 
-const charts = { monthly: null, daily: null, comp: null, model: null, cacheRate: null };
+const charts = { monthly: null, daily: null, comp: null, model: null, cacheRate: null, cursorDaily: null, cursorModel: null };
 
 // ---------- Utilities ----------
 function fmtTokens(n) {
@@ -337,6 +366,63 @@ function normalizeMonthly(json) {
     return { month, ...t, models: normalizeModels(r) };
   }).filter(r => r.month);
 }
+// ---------- Cursor CSV ----------
+// Minimal RFC4180-ish parser — the cursor.com export uses quoted fields with
+// embedded commas, no embedded newlines, no escaped quotes in practice.
+function parseCSV(text) {
+  const rows = [];
+  let i = 0, field = "", row = [], q = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') {
+        if (text[i+1] === '"') { field += '"'; i += 2; continue; }
+        q = false; i++; continue;
+      }
+      field += c; i++;
+    } else {
+      if (c === '"') { q = true; i++; continue; }
+      if (c === ',') { row.push(field); field = ""; i++; continue; }
+      if (c === '\n' || c === '\r') {
+        if (field !== "" || row.length) { row.push(field); rows.push(row); row = []; field = ""; }
+        if (c === '\r' && text[i+1] === '\n') i++;
+        i++; continue;
+      }
+      field += c; i++;
+    }
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows[0];
+  return rows.slice(1).filter(r => r.length === headers.length).map(r =>
+    Object.fromEntries(headers.map((h, idx) => [h, r[idx]])));
+}
+
+function normalizeCursor(text) {
+  if (!text || typeof text !== "string") return [];
+  const rows = parseCSV(text);
+  return rows.map(r => {
+    // Cursor columns: Date, Cloud Agent ID, Automation ID, Kind, Model, Max Mode,
+    // Input (w/ Cache Write), Input (w/o Cache Write), Cache Read, Output Tokens,
+    // Total Tokens, Cost
+    const date = String(r["Date"] || "").slice(0, 10);
+    if (!date) return null;
+    const cacheCreate = num(r["Input (w/ Cache Write)"]);
+    const input = num(r["Input (w/o Cache Write)"]);
+    const cacheRead = num(r["Cache Read"]);
+    const output = num(r["Output Tokens"]);
+    const total = num(r["Total Tokens"]) || (cacheCreate + input + cacheRead + output);
+    return {
+      date,
+      month: normalizeMonth(date),
+      model: String(r["Model"] || "(model)"),
+      kind: String(r["Kind"] || ""),
+      maxMode: String(r["Max Mode"] || "") === "Yes",
+      cacheCreate, input, cacheRead, output, total,
+    };
+  }).filter(Boolean);
+}
+
 function normalizeSessions(json) {
   const arr = asArray(json, "sessions");
   return arr.map(r => {
@@ -358,6 +444,7 @@ function saveCache() {
   try {
     const payload = {
       daily: state.rawDaily, monthly: state.rawMonthly, session: state.rawSession,
+      cursor: state.rawCursor,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (e) { /* ignore quota */ }
@@ -370,7 +457,8 @@ function loadCache() {
     if (p.daily) ingest("daily", p.daily, /*fromCache*/true);
     if (p.monthly) ingest("monthly", p.monthly, /*fromCache*/true);
     if (p.session) ingest("session", p.session, /*fromCache*/true);
-    if (p.daily || p.monthly || p.session) {
+    if (p.cursor) ingest("cursor", p.cursor, /*fromCache*/true);
+    if (p.daily || p.monthly || p.session || p.cursor) {
       document.getElementById("cacheBadge").style.display = "";
       return true;
     }
@@ -379,8 +467,8 @@ function loadCache() {
 }
 function clearAll() {
   localStorage.removeItem(STORAGE_KEY);
-  state.rawDaily = state.rawMonthly = state.rawSession = null;
-  state.daily = []; state.monthly = []; state.sessions = [];
+  state.rawDaily = state.rawMonthly = state.rawSession = state.rawCursor = null;
+  state.daily = []; state.monthly = []; state.sessions = []; state.cursor = [];
   document.querySelectorAll(".upload-cell").forEach(c => {
     c.classList.remove("loaded");
     c.querySelector(".status").textContent = "No file loaded";
@@ -391,10 +479,11 @@ function clearAll() {
 }
 
 // ---------- Ingestion ----------
-function ingest(kind, json, fromCache) {
-  if (kind === "daily") { state.rawDaily = json; state.daily = normalizeDaily(json); }
-  if (kind === "monthly") { state.rawMonthly = json; state.monthly = normalizeMonthly(json); }
-  if (kind === "session") { state.rawSession = json; state.sessions = normalizeSessions(json); }
+function ingest(kind, payload, fromCache) {
+  if (kind === "daily") { state.rawDaily = payload; state.daily = normalizeDaily(payload); }
+  if (kind === "monthly") { state.rawMonthly = payload; state.monthly = normalizeMonthly(payload); }
+  if (kind === "session") { state.rawSession = payload; state.sessions = normalizeSessions(payload); }
+  if (kind === "cursor") { state.rawCursor = payload; state.cursor = normalizeCursor(payload); }
   const cell = document.getElementById("cell-" + kind);
   if (cell) {
     cell.classList.add("loaded");
@@ -402,6 +491,7 @@ function ingest(kind, json, fromCache) {
     if (kind === "daily") count = state.daily.length;
     if (kind === "monthly") count = state.monthly.length;
     if (kind === "session") count = state.sessions.length;
+    if (kind === "cursor") count = state.cursor.length;
     cell.querySelector(".status").textContent = `Loaded ${count} record${count === 1 ? "" : "s"}${fromCache ? " (cached)" : ""}`;
   }
 }
@@ -985,6 +1075,123 @@ function renderCacheAnalysis() {
   ).join("");
 }
 
+// ---------- Cursor activity ----------
+function filteredCursor() {
+  let arr = state.cursor;
+  if (state.filters.month) arr = arr.filter(r => r.month === state.filters.month);
+  return arr;
+}
+
+function renderCursor() {
+  const panel = document.getElementById("cursorPanel");
+  if (!state.cursor.length) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+
+  const events = filteredCursor();
+  const sums = events.reduce((a, e) => {
+    a.input += e.input; a.cacheCreate += e.cacheCreate; a.cacheRead += e.cacheRead;
+    a.output += e.output; a.total += e.total; return a;
+  }, { input: 0, cacheCreate: 0, cacheRead: 0, output: 0, total: 0 });
+  const inputSide = sums.input + sums.cacheCreate + sums.cacheRead;
+  const hitRate = inputSide > 0 ? sums.cacheRead / inputSide : 0;
+  const reuse = sums.cacheCreate > 0 ? sums.cacheRead / sums.cacheCreate : 0;
+
+  const cards = [
+    { label: "Events", value: events.length.toLocaleString(), sub: state.filters.month ? `in ${monthLabel(state.filters.month)}` : "all months" },
+    { label: "Total Tokens", value: fmtTokens(sums.total), sub: sums.total.toLocaleString() },
+    { label: "Cache Hit Rate", value: pct(hitRate), sub: `${fmtTokens(sums.cacheRead)} / ${fmtTokens(inputSide)}` },
+    { label: "Reuse Multiplier", value: reuse > 0 ? reuse.toFixed(1) + "×" : "—", sub: "cache reads ÷ cache writes" },
+  ];
+  document.getElementById("cursorCards").innerHTML = cards.map(c =>
+    `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+  ).join("");
+
+  // Aggregate by day for the daily chart
+  const t = chartTheme();
+  const byDay = new Map();
+  events.forEach(e => {
+    const cur = byDay.get(e.date) || { date: e.date, events: 0, total: 0 };
+    cur.events += 1; cur.total += e.total;
+    byDay.set(e.date, cur);
+  });
+  const days = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  destroyChart("cursorDaily");
+  const ctxD = document.getElementById("cursorDailyChart").getContext("2d");
+  charts.cursorDaily = new Chart(ctxD, {
+    data: {
+      labels: days.map(d => d.date.slice(5)),
+      datasets: [
+        { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#a78bfa", yAxisID: "y" },
+        { type: "line", label: "Events", data: days.map(d => d.events), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 3 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#e6e8ee" } },
+        tooltip: { callbacks: { label: c => c.dataset.yAxisID === "y" ? `Tokens: ${fmtTokens(c.parsed.y)}` : `Events: ${c.parsed.y}` } },
+      },
+      scales: {
+        x: { ticks: { color: t.tick }, grid: { color: t.grid } },
+        y: { position: "left", ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid }, title: { text: "Tokens", color: t.tick, display: true } },
+        y1: { position: "right", ticks: { color: t.tick }, grid: { drawOnChartArea: false }, title: { text: "Events", color: t.tick, display: true }, beginAtZero: true },
+      },
+    },
+  });
+
+  // Per-model breakdown
+  const byModel = new Map();
+  events.forEach(e => {
+    const cur = byModel.get(e.model) || { model: e.model, events: 0, total: 0 };
+    cur.events += 1; cur.total += e.total;
+    byModel.set(e.model, cur);
+  });
+  const models = Array.from(byModel.values()).sort((a, b) => b.total - a.total);
+  destroyChart("cursorModel");
+  const ctxM = document.getElementById("cursorModelChart").getContext("2d");
+  charts.cursorModel = new Chart(ctxM, {
+    type: "bar",
+    data: {
+      labels: models.map(m => m.model),
+      datasets: [{ label: "Total Tokens", data: models.map(m => m.total), backgroundColor: palette(models.length) }],
+    },
+    options: {
+      indexAxis: "y", maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => {
+          const m = models[c.dataIndex];
+          return `${fmtTokens(m.total)} across ${m.events} event${m.events === 1 ? "" : "s"}`;
+        } } },
+      },
+      scales: {
+        x: { ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid } },
+        y: { ticks: { color: t.tick }, grid: { color: t.grid } },
+      },
+    },
+  });
+
+  // Top days table
+  const top = days.slice().sort((a, b) => b.total - a.total).slice(0, 5).map(d => ({
+    date: d.date, events: d.events, total: d.total,
+  }));
+  const wrap = document.getElementById("cursorTopDaysWrap");
+  if (!top.length) {
+    wrap.innerHTML = `<div class="empty">No Cursor activity in this filter.</div>`;
+  } else {
+    wrap.innerHTML = renderTable(
+      [
+        { key: "date", label: "Date" },
+        { key: "events", label: "Events", num: true, fmt: v => v.toLocaleString() },
+        { key: "total", label: "Total Tokens", num: true, fmt: fmtTokens },
+      ],
+      top,
+      { id: "cursorTopDays", sortKey: "total", sortDir: "desc" }
+    );
+  }
+}
+
 // ---------- Master render ----------
 function render() {
   refreshFilters();
@@ -996,6 +1203,7 @@ function render() {
   renderProjects();
   renderSessions();
   renderCacheAnalysis();
+  renderCursor();
 }
 
 // ---------- Wire up ----------
@@ -1006,8 +1214,8 @@ document.querySelectorAll('.upload-cell input[type="file"]').forEach(input => {
     const kind = e.target.getAttribute("data-kind");
     try {
       const text = await file.text();
-      const json = JSON.parse(text);
-      ingest(kind, json, false);
+      const payload = kind === "cursor" ? text : JSON.parse(text);
+      ingest(kind, payload, false);
       saveCache();
       render();
     } catch (err) {
@@ -1035,9 +1243,18 @@ async function loadBundled(month) {
     ingest("daily", d, false);
     ingest("monthly", m, false);
     ingest("session", s, false);
+    // Cursor CSV is optional and not month-partitioned (one rolling export).
+    let cursorNote = "";
+    try {
+      const r = await fetch("./data/cursor/usage.csv", { cache: "no-store" });
+      if (r.ok) {
+        ingest("cursor", await r.text(), false);
+        cursorNote = ` + cursor (${state.cursor.length} events)`;
+      }
+    } catch { /* optional */ }
     saveCache();
     render();
-    status.textContent = `Loaded ./data/${slug}/`;
+    status.textContent = `Loaded ./data/${slug}/${cursorNote}`;
     status.style.color = "var(--accent-2)";
   } catch (err) {
     const isFileScheme = location.protocol === "file:";
@@ -1072,6 +1289,7 @@ document.getElementById("clearBtn").addEventListener("click", clearAll);
 document.getElementById("monthSelect").addEventListener("change", e => {
   state.filters.month = e.target.value;
   renderFeatured(); renderDailyChart(); renderCompositionChart(); renderModelChart();
+  renderCacheAnalysis(); renderCursor();
 });
 document.getElementById("projectSelect").addEventListener("change", e => {
   state.filters.project = e.target.value;
