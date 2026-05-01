@@ -135,6 +135,13 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
   <div class="panel">
     <h2>Filters</h2>
     <div class="filters">
+      <label>Source
+        <select id="sourceSelect">
+          <option value="direct">Direct (ccusage)</option>
+          <option value="relay">Relay</option>
+          <option value="combined">Combined</option>
+        </select>
+      </label>
       <label>Month
         <select id="monthSelect"><option value="">— select —</option></select>
       </label>
@@ -249,18 +256,21 @@ const DEFAULT_FEATURED_MONTH = (() => {
 })();
 
 // ---------- State ----------
+function emptySource() {
+  return { rawDaily: null, rawMonthly: null, rawSession: null, daily: [], monthly: [], sessions: [] };
+}
 const state = {
-  rawDaily: null,
-  rawMonthly: null,
-  rawSession: null,
-  rawCursor: null, // CSV text
-  daily: [],     // normalized: {date, year, month (YYYY-MM), input, output, cacheCreate, cacheRead, total, cost, models:[{name, input, output, cacheCreate, cacheRead, total, cost}]}
-  monthly: [],   // normalized: {month, input, output, cacheCreate, cacheRead, total, cost, models:[...]}
-  sessions: [],  // normalized: {id, project, lastActivity, input, output, cacheCreate, cacheRead, total, cost}
-  cursor: [],    // normalized: {date, month, model, kind, input, cacheCreate, cacheRead, output, total}
+  // Per-source storage. "direct" = ccusage on the user's local machine; "relay"
+  // = a CC routing/proxy provider that emits the same JSON shape.
+  sources: { direct: emptySource(), relay: emptySource() },
+  // Active view (resolved from sources by applySourceFilter()) — renderers read these.
+  daily: [], monthly: [], sessions: [],
+  rawCursor: null,
+  cursor: [],
   filters: {
     month: "",
     project: "",
+    source: "direct",   // "direct" | "relay" | "combined"
     breakdownByModel: false,
   },
 };
@@ -443,7 +453,16 @@ function normalizeSessions(json) {
 function saveCache() {
   try {
     const payload = {
-      daily: state.rawDaily, monthly: state.rawMonthly, session: state.rawSession,
+      direct: {
+        daily: state.sources.direct.rawDaily,
+        monthly: state.sources.direct.rawMonthly,
+        session: state.sources.direct.rawSession,
+      },
+      relay: {
+        daily: state.sources.relay.rawDaily,
+        monthly: state.sources.relay.rawMonthly,
+        session: state.sources.relay.rawSession,
+      },
       cursor: state.rawCursor,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -454,20 +473,28 @@ function loadCache() {
     const s = localStorage.getItem(STORAGE_KEY);
     if (!s) return false;
     const p = JSON.parse(s);
-    if (p.daily) ingest("daily", p.daily, /*fromCache*/true);
-    if (p.monthly) ingest("monthly", p.monthly, /*fromCache*/true);
-    if (p.session) ingest("session", p.session, /*fromCache*/true);
-    if (p.cursor) ingest("cursor", p.cursor, /*fromCache*/true);
-    if (p.daily || p.monthly || p.session || p.cursor) {
-      document.getElementById("cacheBadge").style.display = "";
-      return true;
+    let any = false;
+    // Back-compat: older cache versions stored daily/monthly/session at top level.
+    const direct = p.direct || { daily: p.daily, monthly: p.monthly, session: p.session };
+    if (direct.daily)   { ingest("daily",   direct.daily,   true); any = true; }
+    if (direct.monthly) { ingest("monthly", direct.monthly, true); any = true; }
+    if (direct.session) { ingest("session", direct.session, true); any = true; }
+    if (p.relay) {
+      if (p.relay.daily)   { ingest("relay-daily",   p.relay.daily,   true); any = true; }
+      if (p.relay.monthly) { ingest("relay-monthly", p.relay.monthly, true); any = true; }
+      if (p.relay.session) { ingest("relay-session", p.relay.session, true); any = true; }
     }
+    if (p.cursor) { ingest("cursor", p.cursor, true); any = true; }
+    if (any) document.getElementById("cacheBadge").style.display = "";
+    return any;
   } catch (e) { /* ignore */ }
   return false;
 }
 function clearAll() {
   localStorage.removeItem(STORAGE_KEY);
-  state.rawDaily = state.rawMonthly = state.rawSession = state.rawCursor = null;
+  state.sources.direct = emptySource();
+  state.sources.relay = emptySource();
+  state.rawCursor = null;
   state.daily = []; state.monthly = []; state.sessions = []; state.cursor = [];
   document.querySelectorAll(".upload-cell").forEach(c => {
     c.classList.remove("loaded");
@@ -480,19 +507,72 @@ function clearAll() {
 
 // ---------- Ingestion ----------
 function ingest(kind, payload, fromCache) {
-  if (kind === "daily") { state.rawDaily = payload; state.daily = normalizeDaily(payload); }
-  if (kind === "monthly") { state.rawMonthly = payload; state.monthly = normalizeMonthly(payload); }
-  if (kind === "session") { state.rawSession = payload; state.sessions = normalizeSessions(payload); }
-  if (kind === "cursor") { state.rawCursor = payload; state.cursor = normalizeCursor(payload); }
+  if (kind === "cursor") {
+    state.rawCursor = payload;
+    state.cursor = normalizeCursor(payload);
+  } else {
+    const isRelay = kind.startsWith("relay-");
+    const baseKind = isRelay ? kind.slice("relay-".length) : kind;
+    const slot = isRelay ? state.sources.relay : state.sources.direct;
+    if (baseKind === "daily")   { slot.rawDaily   = payload; slot.daily    = normalizeDaily(payload); }
+    if (baseKind === "monthly") { slot.rawMonthly = payload; slot.monthly  = normalizeMonthly(payload); }
+    if (baseKind === "session") { slot.rawSession = payload; slot.sessions = normalizeSessions(payload); }
+    applySourceFilter();
+  }
   const cell = document.getElementById("cell-" + kind);
   if (cell) {
     cell.classList.add("loaded");
     let count = 0;
-    if (kind === "daily") count = state.daily.length;
-    if (kind === "monthly") count = state.monthly.length;
-    if (kind === "session") count = state.sessions.length;
     if (kind === "cursor") count = state.cursor.length;
+    else {
+      const isRelay = kind.startsWith("relay-");
+      const baseKind = isRelay ? kind.slice("relay-".length) : kind;
+      const slot = isRelay ? state.sources.relay : state.sources.direct;
+      if (baseKind === "daily") count = slot.daily.length;
+      if (baseKind === "monthly") count = slot.monthly.length;
+      if (baseKind === "session") count = slot.sessions.length;
+    }
     cell.querySelector(".status").textContent = `Loaded ${count} record${count === 1 ? "" : "s"}${fromCache ? " (cached)" : ""}`;
+  }
+}
+
+function mergeByKey(arrA, arrB, keyName) {
+  const m = new Map();
+  for (const arr of [arrA, arrB]) {
+    for (const r of arr) {
+      const key = r[keyName];
+      const cur = m.get(key);
+      if (!cur) { m.set(key, { ...r, models: (r.models || []).map(x => ({ ...x })) }); continue; }
+      cur.input += r.input; cur.output += r.output;
+      cur.cacheCreate += r.cacheCreate; cur.cacheRead += r.cacheRead;
+      cur.total += r.total; cur.cost += r.cost;
+      const mm = new Map((cur.models || []).map(x => [x.name, x]));
+      for (const m2 of (r.models || [])) {
+        const cm = mm.get(m2.name);
+        if (!cm) { mm.set(m2.name, { ...m2 }); continue; }
+        cm.input += m2.input; cm.output += m2.output;
+        cm.cacheCreate += m2.cacheCreate; cm.cacheRead += m2.cacheRead;
+        cm.total += m2.total; cm.cost += m2.cost;
+      }
+      cur.models = Array.from(mm.values());
+    }
+  }
+  return Array.from(m.values());
+}
+
+function applySourceFilter() {
+  const src = state.filters.source;
+  const D = state.sources.direct, R = state.sources.relay;
+  if (src === "relay") {
+    state.daily = R.daily; state.monthly = R.monthly; state.sessions = R.sessions;
+  } else if (src === "combined") {
+    state.daily = mergeByKey(D.daily, R.daily, "date");
+    state.monthly = mergeByKey(D.monthly, R.monthly, "month");
+    // Sessions are typically distinct (session IDs encode project paths from
+    // different machines), so concat without merging.
+    state.sessions = D.sessions.concat(R.sessions);
+  } else {
+    state.daily = D.daily; state.monthly = D.monthly; state.sessions = D.sessions;
   }
 }
 
@@ -512,6 +592,24 @@ function filteredSessions() {
 function refreshFilters() {
   const monthSel = document.getElementById("monthSelect");
   const projSel = document.getElementById("projectSelect");
+  const sourceSel = document.getElementById("sourceSelect");
+
+  // Source toggle: rebuild options based on which sources have any data,
+  // then resolve the active source against the current filter selection.
+  const D = state.sources.direct, R = state.sources.relay;
+  const hasDirect = (D.daily.length || D.monthly.length || D.sessions.length) > 0;
+  const hasRelay  = (R.daily.length || R.monthly.length || R.sessions.length) > 0;
+  const opts = [];
+  if (hasDirect) opts.push(["direct", "Direct (ccusage)"]);
+  if (hasRelay)  opts.push(["relay",  "Relay"]);
+  if (hasDirect && hasRelay) opts.push(["combined", "Combined"]);
+  if (!opts.length) opts.push(["direct", "Direct (ccusage)"]); // empty-state default
+  sourceSel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+  let chosenSrc = state.filters.source;
+  if (!opts.find(o => o[0] === chosenSrc)) chosenSrc = opts[0][0];
+  sourceSel.value = chosenSrc;
+  state.filters.source = chosenSrc;
+  applySourceFilter();
 
   // Months: union of monthly + daily's derived months
   const months = new Set();
@@ -1243,6 +1341,20 @@ async function loadBundled(month) {
     ingest("daily", d, false);
     ingest("monthly", m, false);
     ingest("session", s, false);
+    // Relay (optional): same shape, under data/relay/<month>/. Soft-fail if absent.
+    let relayNote = "";
+    try {
+      const relayMonth = month && month !== "latest" ? month : slug;
+      const [rd, rm, rs] = await Promise.all([
+        fetchJson(`./data/relay/${relayMonth}/daily.json`),
+        fetchJson(`./data/relay/${relayMonth}/monthly.json`),
+        fetchJson(`./data/relay/${relayMonth}/session.json`),
+      ]);
+      ingest("relay-daily", rd, false);
+      ingest("relay-monthly", rm, false);
+      ingest("relay-session", rs, false);
+      relayNote = ` + relay`;
+    } catch { /* optional */ }
     // Cursor CSV is optional and not month-partitioned (one rolling export).
     let cursorNote = "";
     try {
@@ -1254,7 +1366,7 @@ async function loadBundled(month) {
     } catch { /* optional */ }
     saveCache();
     render();
-    status.textContent = `Loaded ./data/${slug}/${cursorNote}`;
+    status.textContent = `Loaded ./data/${slug}/${relayNote}${cursorNote}`;
     status.style.color = "var(--accent-2)";
   } catch (err) {
     const isFileScheme = location.protocol === "file:";
@@ -1286,6 +1398,11 @@ document.getElementById("loadBundledBtn").addEventListener("click", () => {
 });
 
 document.getElementById("clearBtn").addEventListener("click", clearAll);
+document.getElementById("sourceSelect").addEventListener("change", e => {
+  state.filters.source = e.target.value;
+  applySourceFilter();
+  render();
+});
 document.getElementById("monthSelect").addEventListener("change", e => {
   state.filters.month = e.target.value;
   renderFeatured(); renderDailyChart(); renderCompositionChart(); renderModelChart();

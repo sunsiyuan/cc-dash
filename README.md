@@ -37,12 +37,15 @@ cc-dash/
 │   └── com.example.cc-dash.refresh.plist  # template LaunchAgent (edit paths to install)
 ├── data/                          # mostly gitignored; regenerable
 │   ├── index.json                 # tracked — drives the dashboard's bundled-month dropdown
-│   ├── 2026-04/                   # gitignored — Claude Code JSONs
+│   ├── 2026-04/                   # gitignored — direct ccusage JSONs (your local machine)
 │   │   ├── daily.json
 │   │   ├── monthly.json
 │   │   └── session.json
 │   ├── latest -> 2026-04          # gitignored
 │   ├── refresh.log                # gitignored — launchd stdout/stderr
+│   ├── relay/                     # gitignored — same JSONs from a CC routing/relay provider
+│   │   ├── 2026-04/{daily,monthly,session}.json
+│   │   └── latest -> 2026-04
 │   └── cursor/                    # gitignored — Cursor CSV exports (manual)
 │       ├── usage.csv              # the file the dashboard reads
 │       └── cursor-usage-events-*.csv  # archived dated exports
@@ -77,6 +80,23 @@ npx ccusage@latest session --since 20260401 --until 20260430 --json > session.js
 ```
 
 (Drop `--since`/`--until` for full history.)
+
+## Multiple sources (Direct + Relay)
+
+If you also use Claude Code through a routing/relay provider (one-api, new-api, FastGPT, etc.) that emits the same `daily.json` / `monthly.json` / `session.json` shape, drop the relay's exports under `data/relay/<YYYY-MM>/`:
+
+```
+data/relay/2026-04/{daily,monthly,session}.json
+data/relay/latest -> 2026-04
+```
+
+The dashboard's **Source** filter then offers Direct / Relay / Combined:
+
+- **Direct** — your local ccusage exports.
+- **Relay** — the relay provider's exports.
+- **Combined** — sums per-date (daily) and per-month (monthly), concatenates sessions. Useful for "total CC spend across both billing channels"; the cache panel in this mode shows the blended hit rate, which is rarely what you want — flip to a single source for clean cache-reuse signals.
+
+The toggle only appears when both sources have data; otherwise the dashboard silently uses whichever is loaded.
 
 ## Cursor data
 
