@@ -174,28 +174,6 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     </div>
   </div>
 
-  <div class="grid cols-2">
-    <div class="panel">
-      <h2>Token Composition</h2>
-      <div class="chart-wrap"><canvas id="compChart"></canvas></div>
-      <div id="compLegend" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
-    </div>
-    <div class="panel" id="modelPanel" style="display:none">
-      <h2>By Model</h2>
-      <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Top Projects by Total Tokens</h2>
-    <div id="projectsWrap"></div>
-  </div>
-
-  <div class="panel">
-    <h2>Top Sessions by Total Tokens</h2>
-    <div id="sessionsWrap"></div>
-  </div>
-
   <div class="panel" id="cachePanel">
     <h2>Cache &amp; Context Management</h2>
     <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
@@ -217,6 +195,28 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <h2>Insights</h2>
     <ul id="cacheInsights" class="insights"></ul>
   </div>
+
+  <div class="grid cols-2">
+    <div class="panel">
+      <h2>Token Composition</h2>
+      <div class="chart-wrap"><canvas id="compChart"></canvas></div>
+      <div id="compLegend" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="panel" id="modelPanel" style="display:none">
+      <h2>By Model</h2>
+      <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Top Projects by Total Tokens</h2>
+    <div id="projectsWrap"></div>
+  </div>
+
+  <details class="panel" id="sessionsPanel">
+    <summary><h2 style="display:inline">Top Sessions by Total Tokens</h2></summary>
+    <div id="sessionsWrap" style="margin-top:12px"></div>
+  </details>
 
   <div class="panel" id="cursorPanel" style="display:none">
     <h2>Cursor Activity</h2>

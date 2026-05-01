@@ -52,6 +52,46 @@ cc-dash/
 └── .gitignore                     # data/* except !data/index.json
 ```
 
+## Reading the numbers
+
+### Token formula
+
+```
+total_tokens = input + output + cache_creation + cache_read
+```
+
+ccusage rolls all four into `totalTokens`, which is why a healthy Claude Code user often shows `total` orders of magnitude larger than `input + output` alone — the bulk is `cache_read`. That's not a bug, it's the cost-saving working as intended: every cached prefix you re-read on subsequent turns counts as fresh `cache_read` tokens, but you're billed at ~10% of the input rate for them.
+
+| Field | What it is | Approx. price (relative to fresh input) |
+|---|---|---|
+| `input` | New tokens not from cache | 1.0× |
+| `output` | Model's response | ~5× input |
+| `cache_creation` | Input tokens written to cache | 1.25× (5-min TTL) or 2.0× (1-hour TTL) |
+| `cache_read` | Input tokens served from cache | 0.1× |
+
+### Cache reuse multiplier
+
+```
+reuse = cache_read / cache_creation
+```
+
+Anthropic's break-even (where caching pays for itself) is ~1.4× for a 5-min TTL or ~2.1× for a 1-hour TTL. The Cache panel grades you on a wider scale so you have margin:
+
+| Reuse | Verdict | Color |
+|---|---|---|
+| ≥ 10× | excellent — long, focused sessions, stable file set | green |
+| 3–10× | healthy — comfortably above break-even | green |
+| 1–3× | marginal — cache barely paying for itself | amber |
+| < 1× | losing money — cache writes outnumber reads | red |
+
+### Cache hit rate
+
+```
+hit_rate = cache_read / (input + cache_creation + cache_read)
+```
+
+Share of input-side tokens served from cache. Typical Claude Code: 40–70%; very long sticky sessions can hit 90%+. Lower numbers are usually a sign of frequent context churn (large tool outputs pasted in, frequent `/clear`, switching between projects).
+
 ## Quick start
 
 ```sh
