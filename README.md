@@ -6,12 +6,12 @@ Local static dashboard for [ccusage](https://www.npmjs.com/package/ccusage) JSON
 
 For Claude Code (via ccusage):
 
-- **Featured month totals** — input / output / total tokens + cost USD, with the top 5 days by token volume.
-- **Monthly trend** — bar (tokens) + line (cost) on dual axes.
+- **Featured month cards** — Total tokens, cost USD, cache hit %, reuse ×. The last two are the actionable signals (the cache panel grades you on them).
 - **Daily trend** for the selected month, with optional model breakdown (stacked).
-- **Token composition** — input / output / cache create / cache read doughnut.
-- **Top projects** and **top sessions** tables, sortable.
 - **Cache & context-management panel** — hit rate, reuse multiplier, daily hit-rate trend, per-project cache efficiency, and rule-based insights about your context habits.
+- **Top projects** — one row per CWD ccusage tracks, columns Project / Total / Cost / Reuse ×. Reuse pill is colored by health (≥10× green, 3–10× soft green, 1–3× amber, <1× red).
+- **By Model** breakdown when the toggle is on.
+- **Monthly trend** auto-collapses with one month of data; expands once you've got history.
 
 For Cursor (via the cursor.com CSV export):
 

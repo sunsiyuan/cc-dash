@@ -74,6 +74,12 @@
   ul.insights li.tip { border-left-color: var(--accent); }
   ul.insights li b { color: var(--text); }
   ul.insights li .sub { color: var(--muted); display: block; margin-top: 2px; font-size: 12px; }
+  .reuse-pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .reuse-good { background: rgba(91, 227, 192, 0.18); color: var(--accent-2); }
+  .reuse-ok   { background: rgba(91, 227, 192, 0.10); color: var(--accent-2); }
+  .reuse-warn { background: rgba(255, 184, 107, 0.18); color: var(--warn); }
+  .reuse-bad  { background: rgba(255, 107, 138, 0.18); color: var(--bad); }
+  .reuse-neutral { background: var(--panel-2); color: var(--muted); }
 </style>
 </head>
 <body>
@@ -154,25 +160,21 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     </div>
   </div>
 
-  <!-- Featured month summary (defaults to April of current year) -->
+  <!-- Featured month summary -->
   <div class="panel" id="featuredPanel">
     <h2><span id="featuredTitle">April Totals</span></h2>
     <div class="grid cols-4" id="featuredCards"></div>
-    <hr class="sep" />
-    <h2>Top 5 Days <span id="featuredSubTitle" style="color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0">in April</span> by Total Tokens</h2>
-    <div id="topDaysWrap"></div>
   </div>
 
-  <div class="grid cols-2">
-    <div class="panel">
-      <h2>Monthly Trend — Total Tokens &amp; Cost</h2>
-      <div class="chart-wrap"><canvas id="monthlyChart"></canvas></div>
-    </div>
-    <div class="panel">
-      <h2>Daily Trend — Selected Month</h2>
-      <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
-    </div>
+  <div class="panel">
+    <h2>Daily Trend — Selected Month</h2>
+    <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
   </div>
+
+  <details class="panel" id="monthlyPanel">
+    <summary><h2 style="display:inline">Monthly Trend — Total Tokens &amp; Cost</h2></summary>
+    <div class="chart-wrap" style="margin-top:12px"><canvas id="monthlyChart"></canvas></div>
+  </details>
 
   <div class="panel" id="cachePanel">
     <h2>Cache &amp; Context Management</h2>
@@ -196,27 +198,18 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <ul id="cacheInsights" class="insights"></ul>
   </div>
 
-  <div class="grid cols-2">
-    <div class="panel">
-      <h2>Token Composition</h2>
-      <div class="chart-wrap"><canvas id="compChart"></canvas></div>
-      <div id="compLegend" style="color:var(--muted);font-size:12px;margin-top:8px"></div>
-    </div>
-    <div class="panel" id="modelPanel" style="display:none">
-      <h2>By Model</h2>
-      <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
-    </div>
+  <div class="panel" id="modelPanel" style="display:none">
+    <h2>By Model</h2>
+    <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
   </div>
 
   <div class="panel">
-    <h2>Top Projects by Total Tokens</h2>
+    <h2>Top Projects</h2>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:10px">
+      One row per CWD that ccusage tracks. Reuse × is colored by health (≥10× green, 3–10× soft green, 1–3× amber, &lt;1× red).
+    </div>
     <div id="projectsWrap"></div>
   </div>
-
-  <details class="panel" id="sessionsPanel">
-    <summary><h2 style="display:inline">Top Sessions by Total Tokens</h2></summary>
-    <div id="sessionsWrap" style="margin-top:12px"></div>
-  </details>
 
   <div class="panel" id="cursorPanel" style="display:none">
     <h2>Cursor Activity</h2>
@@ -275,7 +268,7 @@ const state = {
   },
 };
 
-const charts = { monthly: null, daily: null, comp: null, model: null, cacheRate: null, cursorDaily: null, cursorModel: null };
+const charts = { monthly: null, daily: null, model: null, cacheRate: null, cursorDaily: null, cursorModel: null };
 
 // ---------- Utilities ----------
 function fmtTokens(n) {
@@ -649,9 +642,7 @@ function renderFeatured() {
   // to "April of current year" if present, else nothing.
   let featured = monthFilter || (state.daily.some(d => d.month === DEFAULT_FEATURED_MONTH) ? DEFAULT_FEATURED_MONTH : "");
   document.getElementById("featuredTitle").textContent = featured ? `${monthLabel(featured)} Totals` : "Totals (no month selected)";
-  document.getElementById("featuredSubTitle").textContent = featured ? `in ${monthLabel(featured)}` : "";
 
-  // Aggregate from daily data (preferred — same source ccusage uses to roll up)
   const days = featured ? state.daily.filter(d => d.month === featured) : state.daily;
   const agg = days.reduce((a, d) => {
     a.input += d.input; a.output += d.output;
@@ -659,37 +650,25 @@ function renderFeatured() {
     a.total += d.total; a.cost += d.cost; return a;
   }, { input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0, cost: 0 });
 
-  // If daily has no rows for the month, fall back to monthly summary
   if (days.length === 0 && featured) {
     const m = state.monthly.find(x => x.month === featured);
     if (m) Object.assign(agg, { input: m.input, output: m.output, cacheCreate: m.cacheCreate, cacheRead: m.cacheRead, total: m.total, cost: m.cost });
   }
 
+  const inputSide = agg.input + agg.cacheCreate + agg.cacheRead;
+  const hitRate = inputSide > 0 ? agg.cacheRead / inputSide : 0;
+  const reuse = agg.cacheCreate > 0 ? agg.cacheRead / agg.cacheCreate : 0;
+  const dayCount = days.length;
+
   const cards = [
-    { label: "Input Tokens", value: fmtTokens(agg.input), sub: agg.input.toLocaleString() + " tokens" },
-    { label: "Output Tokens", value: fmtTokens(agg.output), sub: agg.output.toLocaleString() + " tokens" },
-    { label: "Total Tokens", value: fmtTokens(agg.total), sub: agg.total.toLocaleString() + " tokens" },
-    { label: "Cost (USD)", value: fmtUSD(agg.cost), sub: days.length + " day" + (days.length === 1 ? "" : "s") },
+    { label: "Total Tokens", value: fmtTokens(agg.total), sub: dayCount ? `${dayCount} active day${dayCount === 1 ? "" : "s"}` : "—" },
+    { label: "Cost (USD)", value: fmtUSD(agg.cost), sub: dayCount > 0 ? `${fmtUSD(agg.cost / dayCount)} / day avg` : "" },
+    { label: "Cache Hit %", value: pct(hitRate), sub: `${fmtTokens(agg.cacheRead)} of ${fmtTokens(inputSide)} input-side` },
+    { label: "Reuse ×", value: reuse > 0 ? reuse.toFixed(1) + "×" : "—", sub: "cache reads ÷ cache writes" },
   ];
   document.getElementById("featuredCards").innerHTML = cards.map(c =>
     `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
   ).join("");
-
-  // Top 5 days in featured month
-  const wrap = document.getElementById("topDaysWrap");
-  if (!days.length) { wrap.innerHTML = `<div class="empty">No daily data for this month.</div>`; return; }
-  const top = [...days].sort((a, b) => b.total - a.total).slice(0, 5);
-  wrap.innerHTML = renderTable(
-    [
-      { key: "date", label: "Date" },
-      { key: "input", label: "Input", num: true, fmt: fmtTokens },
-      { key: "output", label: "Output", num: true, fmt: fmtTokens },
-      { key: "total", label: "Total", num: true, fmt: fmtTokens },
-      { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
-    ],
-    top,
-    { sortKey: "total", sortDir: "desc", id: "topDays" }
-  );
 }
 
 // ---------- Rendering: Charts ----------
@@ -803,34 +782,6 @@ function renderDailyChart() {
   }
 }
 
-function renderCompositionChart() {
-  destroyChart("comp");
-  const ctx = document.getElementById("compChart").getContext("2d");
-  const days = filteredDaily();
-  const sums = days.reduce((a, d) => {
-    a.input += d.input; a.output += d.output;
-    a.cacheCreate += d.cacheCreate; a.cacheRead += d.cacheRead; return a;
-  }, { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 });
-  const labels = ["Input", "Output", "Cache Create", "Cache Read"];
-  const data = [sums.input, sums.output, sums.cacheCreate, sums.cacheRead];
-  const colors = ["#7c9cff", "#5be3c0", "#ffb86b", "#ff6b8a"];
-  const total = data.reduce((a, b) => a + b, 0);
-  charts.comp = new Chart(ctx, {
-    type: "doughnut",
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: "#1f2330", borderWidth: 2 }] },
-    options: {
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { labels: { color: "#e6e8ee" } },
-        tooltip: { callbacks: { label: (c) => `${c.label}: ${fmtTokens(c.parsed)} (${total ? ((c.parsed / total) * 100).toFixed(1) : 0}%)` } },
-      },
-    },
-  });
-  document.getElementById("compLegend").innerHTML = labels.map((l, i) =>
-    `${l}: <strong>${fmtTokens(data[i])}</strong> (${total ? ((data[i] / total) * 100).toFixed(1) : 0}%)`
-  ).join(" &middot; ");
-}
-
 function renderModelChart() {
   destroyChart("model");
   const panel = document.getElementById("modelPanel");
@@ -925,15 +876,24 @@ function renderTable(columns, rows, opts = {}) {
         const s = tableState[id];
         if (s.sortKey === key) s.sortDir = s.sortDir === "asc" ? "desc" : "asc";
         else { s.sortKey = key; s.sortDir = "desc"; }
-        // Re-render: find the wrap and replace
+        // Re-render the panel that owns this table.
         const wrap = th.closest("table").parentElement;
-        if (wrap === document.getElementById("topDaysWrap")) renderFeatured();
-        else if (wrap === document.getElementById("projectsWrap")) renderProjects();
-        else if (wrap === document.getElementById("sessionsWrap")) renderSessions();
+        if (wrap === document.getElementById("projectsWrap")) renderProjects();
+        else if (wrap === document.getElementById("cacheProjectsWrap")) renderCacheAnalysis();
+        else if (wrap === document.getElementById("cursorTopDaysWrap")) renderCursor();
       });
     });
   }, 0);
   return html;
+}
+
+function reuseHealth(reuse) {
+  // Same thresholds as the Cache panel insights — visual continuity.
+  if (!isFinite(reuse) || reuse <= 0) return "neutral";
+  if (reuse >= 10) return "good";
+  if (reuse >= 3) return "ok";
+  if (reuse >= 1) return "warn";
+  return "bad";
 }
 
 function renderProjects() {
@@ -942,57 +902,31 @@ function renderProjects() {
   if (!sessions.length) { wrap.innerHTML = `<div class="empty">No session data loaded.</div>`; return; }
   const m = new Map();
   sessions.forEach(s => {
-    const cur = m.get(s.project) || { project: s.project, sessions: 0, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, total: 0, cost: 0 };
-    cur.sessions += 1;
-    cur.input += s.input; cur.output += s.output;
-    cur.cacheCreate += s.cacheCreate; cur.cacheRead += s.cacheRead;
+    const cur = m.get(s.project) || { project: s.project, total: 0, cost: 0, cacheCreate: 0, cacheRead: 0 };
     cur.total += s.total; cur.cost += s.cost;
+    cur.cacheCreate += s.cacheCreate; cur.cacheRead += s.cacheRead;
     m.set(s.project, cur);
   });
-  const rows = Array.from(m.values());
+  const rows = Array.from(m.values()).map(r => ({
+    project: r.project,
+    total: r.total,
+    cost: r.cost,
+    reuse: r.cacheCreate > 0 ? r.cacheRead / r.cacheCreate : 0,
+  }));
+  const reuseFmt = v => {
+    if (!v) return "—";
+    const cls = reuseHealth(v);
+    return `<span class="reuse-pill reuse-${cls}">${v.toFixed(1)}×</span>`;
+  };
   wrap.innerHTML = renderTable(
     [
       { key: "project", label: "Project" },
-      { key: "sessions", label: "Sessions", num: true, fmt: v => v.toLocaleString() },
-      { key: "input", label: "Input", num: true, fmt: fmtTokens },
-      { key: "output", label: "Output", num: true, fmt: fmtTokens },
-      { key: "cacheCreate", label: "Cache Create", num: true, fmt: fmtTokens },
-      { key: "cacheRead", label: "Cache Read", num: true, fmt: fmtTokens },
       { key: "total", label: "Total", num: true, fmt: fmtTokens },
       { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
+      { key: "reuse", label: "Reuse ×", num: true, fmt: reuseFmt },
     ],
     rows,
     { id: "projects", sortKey: "total", sortDir: "desc" }
-  );
-}
-
-function renderSessions() {
-  const wrap = document.getElementById("sessionsWrap");
-  const sessions = filteredSessions();
-  if (!sessions.length) { wrap.innerHTML = `<div class="empty">No session data loaded.</div>`; return; }
-  // Show top 25 to keep the table reasonable; sortable lets users flip.
-  const rows = [...sessions].sort((a, b) => b.total - a.total).slice(0, 25).map(s => ({
-    id: s.id.length > 30 ? s.id.slice(0, 8) + "…" + s.id.slice(-8) : s.id,
-    project: s.project,
-    lastActivity: s.lastActivity,
-    input: s.input, output: s.output,
-    cacheCreate: s.cacheCreate, cacheRead: s.cacheRead,
-    total: s.total, cost: s.cost,
-  }));
-  wrap.innerHTML = renderTable(
-    [
-      { key: "id", label: "Session" },
-      { key: "project", label: "Project" },
-      { key: "lastActivity", label: "Last Activity" },
-      { key: "input", label: "Input", num: true, fmt: fmtTokens },
-      { key: "output", label: "Output", num: true, fmt: fmtTokens },
-      { key: "cacheCreate", label: "Cache Create", num: true, fmt: fmtTokens },
-      { key: "cacheRead", label: "Cache Read", num: true, fmt: fmtTokens },
-      { key: "total", label: "Total", num: true, fmt: fmtTokens },
-      { key: "cost", label: "Cost", num: true, fmt: fmtUSD },
-    ],
-    rows,
-    { id: "sessions", sortKey: "total", sortDir: "desc" }
   );
 }
 
@@ -1296,12 +1230,20 @@ function render() {
   renderFeatured();
   renderMonthlyChart();
   renderDailyChart();
-  renderCompositionChart();
   renderModelChart();
   renderProjects();
-  renderSessions();
   renderCacheAnalysis();
   renderCursor();
+  syncMonthlyDetails();
+}
+
+// Auto-collapse Monthly Trend when there's nothing trending yet (≤1 month).
+function syncMonthlyDetails() {
+  const el = document.getElementById("monthlyPanel");
+  if (!el) return;
+  const monthCount = state.monthly.length || new Set(state.daily.map(d => d.month)).size;
+  if (monthCount <= 1) el.removeAttribute("open");
+  else el.setAttribute("open", "");
 }
 
 // ---------- Wire up ----------
@@ -1405,12 +1347,12 @@ document.getElementById("sourceSelect").addEventListener("change", e => {
 });
 document.getElementById("monthSelect").addEventListener("change", e => {
   state.filters.month = e.target.value;
-  renderFeatured(); renderDailyChart(); renderCompositionChart(); renderModelChart();
+  renderFeatured(); renderDailyChart(); renderModelChart();
   renderCacheAnalysis(); renderCursor();
 });
 document.getElementById("projectSelect").addEventListener("change", e => {
   state.filters.project = e.target.value;
-  renderProjects(); renderSessions();
+  renderProjects(); renderCacheAnalysis();
 });
 document.getElementById("modelToggle").addEventListener("change", e => {
   state.filters.breakdownByModel = e.target.checked;
