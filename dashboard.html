@@ -110,6 +110,27 @@
   .surface-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
   .surface-legend .row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .surface-legend .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+  .overview-detail { display: grid; gap: 6px; margin-top: 14px; }
+  .overview-detail .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12.5px; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .overview-detail .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .overview-detail .tool { font-weight: 700; color: var(--text); min-width: 76px; }
+  .overview-detail .stat { color: var(--muted); }
+  .overview-detail .stat b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 2px; }
+  /* --- polish --- */
+  .panel, details.panel { box-shadow: 0 1px 2px rgba(0,0,0,0.18), 0 6px 18px rgba(0,0,0,0.10); transition: background 0.15s, border-color 0.15s; }
+  :root[data-theme="light"] .panel, :root[data-theme="light"] details.panel { box-shadow: 0 1px 2px rgba(15,23,42,0.05), 0 6px 16px rgba(15,23,42,0.06); }
+  .card { transition: transform 0.12s, border-color 0.12s, box-shadow 0.12s; }
+  .card:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 6px 16px rgba(0,0,0,0.18); }
+  .card .value { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  /* highlight the first overview card (the cross-tool total) */
+  #overviewCards .card:first-child { background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, var(--panel-2)), var(--panel-2)); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+  #overviewCards .card:first-child .value { color: var(--accent); }
+  select, button { transition: border-color 0.12s, background 0.12s, color 0.12s; }
+  button:hover { color: var(--text); }
+  h1 { font-weight: 700; letter-spacing: -0.02em; }
+  summary { list-style: none; } summary::-webkit-details-marker { display: none; }
+  summary::before { content: "▸ "; color: var(--muted); font-size: 11px; }
+  details[open] > summary::before { content: "▾ "; }
 </style>
 </head>
 <body>
@@ -131,13 +152,14 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     </details>
   </div>
 
-  <div class="panel">
-    <h2>Load Data</h2>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+  <details class="panel" id="loadPanel" open>
+    <summary><h2 style="display:inline">Load Data</h2></summary>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:14px 0">
       <button id="loadBundledBtn" class="primary">Load bundled data</button>
       <select id="bundledMonthSelect" title="Bundled month">
         <option value="latest">latest</option>
       </select>
+      <button id="loadAllBtn" title="Load every month so the Monthly Trend can compare">Load all months</button>
       <span id="bundledStatus" style="color:var(--muted);font-size:12px"></span>
     </div>
     <div style="color:var(--muted);font-size:12px;margin-bottom:10px">
@@ -169,7 +191,7 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
       <button id="clearBtn">Clear all</button>
       <span class="badge" id="cacheBadge" style="display:none">Loaded from cache</span>
     </div>
-  </div>
+  </details>
 
   <div class="panel">
     <h2>Filters</h2>
@@ -198,9 +220,7 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <h2><span id="overviewTitle">Total Usage</span></h2>
     <div class="grid cols-4" id="overviewCards"></div>
     <div class="surface-bar" id="overviewBar" style="margin-bottom:0"></div>
-    <div style="color:var(--muted);font-size:11px;margin-top:8px">
-      Equivalent API $ across tools (ccusage already prices Claude at Anthropic API rates; Codex CLI &amp; Cursor priced the same way). Tokens aren't summed — ccusage's total is inflated by cache reads, so it isn't comparable across tools. Codex cloud is a credit-percent distribution and isn't included in $.
-    </div>
+    <div class="overview-detail" id="overviewDetail"></div>
   </div>
 
   <!-- Per-tool tabs. Month filter applies to all; Source/Project/model toggle are Claude-only. -->
@@ -352,8 +372,8 @@ const state = {
   daily: [], monthly: [], sessions: [],
   rawCursor: null,
   cursor: [],
-  cursorCost: null,        // data/cursor/<month>.json (priced equivalent-$ summary)
-  codex: { cli: null, cloud: null },  // cli = {monthly, daily}; cloud = data/codex/cloud/<month>.json
+  cursorCost: {},          // month -> data/cursor/<month>.json (priced equivalent-$ summary)
+  codex: { cli: {}, cloud: {} },  // month -> {monthly,daily} ; month -> cloud json
   activeTab: "claude",
   filters: {
     month: "",
@@ -575,8 +595,10 @@ function loadCache() {
       if (p.relay.session) { ingest("relay-session", p.relay.session, true); any = true; }
     }
     if (p.cursor) { ingest("cursor", p.cursor, true); any = true; }
-    if (p.cursorCost) { state.cursorCost = p.cursorCost; any = true; }
-    if (p.codex) { state.codex = p.codex; any = true; }
+    // Only accept the month-keyed shapes (older caches stored single-month
+    // objects with .totals / .monthly — ignore those rather than crash).
+    if (p.cursorCost && typeof p.cursorCost === "object" && !p.cursorCost.totals) { state.cursorCost = p.cursorCost; any = true; }
+    if (p.codex && p.codex.cli && typeof p.codex.cli === "object" && !p.codex.cli.monthly) { state.codex = { cli: p.codex.cli || {}, cloud: p.codex.cloud || {} }; any = true; }
     if (any) document.getElementById("cacheBadge").style.display = "";
     return any;
   } catch (e) { /* ignore */ }
@@ -587,8 +609,8 @@ function clearAll() {
   state.sources.direct = emptySource();
   state.sources.relay = emptySource();
   state.rawCursor = null;
-  state.cursorCost = null;
-  state.codex = { cli: null, cloud: null };
+  state.cursorCost = {};
+  state.codex = { cli: {}, cloud: {} };
   state.daily = []; state.monthly = []; state.sessions = []; state.cursor = [];
   document.querySelectorAll(".upload-cell").forEach(c => {
     c.classList.remove("loaded");
@@ -1234,14 +1256,14 @@ function renderCursor() {
   const reuse = sums.cacheCreate > 0 ? sums.cacheRead / sums.cacheCreate : 0;
   // Equivalent API $ from the priced summary (data/cursor/<month>.json), when it
   // covers the selected month. Cursor itself bills via subscription ("Included").
-  const cc = state.cursorCost;
-  const costMatches = cc && cc.totals && (!state.filters.month || cc.month === state.filters.month);
+  const cc = state.cursorCost[viewMonth()];
+  const costMatches = cc && cc.totals;
   const costPartial = cc && cc.unpriced_models && cc.unpriced_models.length;
 
   const cards = [
     { label: "Events", value: events.length.toLocaleString(), sub: state.filters.month ? `in ${monthLabel(state.filters.month)}` : "all months" },
     { label: "Total Tokens", value: fmtTokens(sums.total), sub: `hit ${pct(hitRate)} · reuse ${reuse > 0 ? reuse.toFixed(1) + "×" : "—"}` },
-    { label: "Equiv. API $", value: costMatches ? (costPartial ? "~" : "") + fmtUSD(cc.totals.cost_usd) : "—", sub: costMatches ? (costPartial ? `excl. ${cc.unpriced_models.join(", ")}` : "billed as Included; priced at API rates") : "run import-cursor.sh" },
+    { label: "Equiv. API $", value: costMatches ? fmtUSD(cc.totals.cost_usd) : "—", sub: costMatches ? (costPartial ? `excl. ${cc.unpriced_models.join(", ")}` : "priced at API rates") : "run import-cursor.sh" },
     { label: "Cache Hit Rate", value: pct(hitRate), sub: `${fmtTokens(sums.cacheRead)} / ${fmtTokens(inputSide)}` },
   ];
   document.getElementById("cursorCards").innerHTML = cards.map(c =>
@@ -1338,7 +1360,7 @@ function renderCursor() {
 // ---------- Rendering: cross-tool overview ----------
 function renderOverview() {
   const panel = document.getElementById("overviewPanel");
-  const month = state.filters.month;
+  const month = state.filters.month || viewMonth();
   // Claude $ respects the Source toggle (direct/relay/combined) via state.daily.
   const cDays = month ? state.daily.filter(d => d.month === month) : state.daily;
   let claudeCost = cDays.reduce((s, d) => s + d.cost, 0);
@@ -1346,24 +1368,22 @@ function renderOverview() {
   if (!cDays.length && month) { const m = state.monthly.find(x => x.month === month); if (m) { claudeCost = m.cost; claudeTok = m.total; } }
   const hasClaude = cDays.length > 0 || claudeCost > 0;
 
-  const codexM = state.codex.cli && state.codex.cli.monthly && state.codex.cli.monthly.totals;
+  const codexEntry = state.codex.cli[month];
+  const codexM = codexEntry && codexEntry.monthly && codexEntry.monthly.totals;
   const codexCost = codexM ? codexM.cost_usd : null;
-  const codexPartial = codexM && (state.codex.cli.monthly.unpriced_models || []).length;
-  const curT = state.cursorCost && state.cursorCost.totals;
+  const curT = state.cursorCost[month] && state.cursorCost[month].totals;
   const curCost = curT ? curT.cost_usd : null;
-  const curPartial = curT && (state.cursorCost.unpriced_models || []).length;
 
   if (!hasClaude && codexCost == null && curCost == null) { panel.style.display = "none"; return; }
   panel.style.display = "";
   document.getElementById("overviewTitle").textContent = "Total Usage" + (month ? " — " + monthLabel(month) : "");
 
   const total = (hasClaude ? claudeCost : 0) + (codexCost || 0) + (curCost || 0);
-  const anyPartial = codexPartial || curPartial;
   const cards = [
-    { label: "Total Equiv. $", value: (anyPartial ? "~" : "") + fmtUSD(total), sub: "across tools · cloud excl." },
+    { label: "Total Equiv. $", value: fmtUSD(total), sub: "across tools" },
     { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? fmtTokens(claudeTok) + " tok" : "not loaded" },
-    { label: "Codex CLI", value: codexCost != null ? (codexPartial ? "~" : "") + fmtUSD(codexCost) : "—", sub: codexM ? fmtTokens(codexM.total) + " tok" : "not loaded" },
-    { label: "Cursor", value: curCost != null ? (curPartial ? "~" : "") + fmtUSD(curCost) : "—", sub: curT ? fmtTokens(curT.total_tokens) + " tok" : "not loaded" },
+    { label: "Codex CLI", value: codexCost != null ? fmtUSD(codexCost) : "—", sub: codexM ? fmtTokens(codexM.total) + " tok" : "not loaded" },
+    { label: "Cursor", value: curCost != null ? fmtUSD(curCost) : "—", sub: curT ? fmtTokens(curT.total_tokens) + " tok" : "not loaded" },
   ];
   document.getElementById("overviewCards").innerHTML = cards.map(c =>
     `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join("");
@@ -1375,10 +1395,39 @@ function renderOverview() {
   ].filter(s => s.v > 0);
   const sum = segs.reduce((a, s) => a + s.v, 0) || 1;
   const colors = palette(Math.max(segs.length, 1));
-  document.getElementById("overviewBar").innerHTML = segs.map((s, i) => {
+  const colorOf = {};
+  segs.forEach((s, i) => { colorOf[s.name] = colors[i]; });
+  document.getElementById("overviewBar").innerHTML = segs.map(s => {
     const p = s.v / sum * 100;
-    return `<span style="width:${p}%;background:${colors[i]}" title="${s.name}: ${fmtUSD(s.v)} (${p.toFixed(1)}%)">${p >= 10 ? s.name + " " + p.toFixed(0) + "%" : ""}</span>`;
+    return `<span style="width:${p}%;background:${colorOf[s.name]}" title="${s.name}: ${fmtUSD(s.v)} (${p.toFixed(1)}%)">${p >= 10 ? s.name + " " + p.toFixed(0) + "%" : ""}</span>`;
   }).join("");
+
+  // Per-tool key numbers (input / output / cache / hit / reuse) right in the summary.
+  const rows = [];
+  if (hasClaude) {
+    const a = cDays.reduce((x, d) => { x.input += d.input; x.output += d.output; x.cc += d.cacheCreate; x.cr += d.cacheRead; return x; }, { input: 0, output: 0, cc: 0, cr: 0 });
+    const inSide = a.input + a.cc + a.cr;
+    rows.push({ name: "Claude", color: colorOf["Claude"] || "#7c9cff", stats: [
+      ["input", fmtTokens(a.input)], ["output", fmtTokens(a.output)], ["cache read", fmtTokens(a.cr)],
+      ["hit", pct(inSide ? a.cr / inSide : 0)], ["reuse", a.cc ? (a.cr / a.cc).toFixed(1) + "×" : "—"],
+    ] });
+  }
+  if (codexM) {
+    rows.push({ name: "Codex CLI", color: colorOf["Codex"] || "#5be3c0", stats: [
+      ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
+      ["hit", pct((codexM.cache_hit_pct || 0) / 100)], ["reuse", "— (no cache writes reported)"],
+    ] });
+  }
+  if (curT) {
+    const cw = curT.cache_write || 0, ci = curT.input || 0, cr = curT.cache_read || 0, inSide = cw + ci + cr;
+    rows.push({ name: "Cursor", color: colorOf["Cursor"] || "#a78bfa", stats: [
+      ["input", fmtTokens(ci)], ["output", fmtTokens(curT.output)], ["cache read", fmtTokens(cr)],
+      ["hit", pct(inSide ? cr / inSide : 0)], ["reuse", cw ? (cr / cw).toFixed(1) + "×" : "—"],
+    ] });
+  }
+  document.getElementById("overviewDetail").innerHTML = rows.map(r =>
+    `<div class="row"><span class="dot" style="background:${r.color}"></span><span class="tool">${r.name}</span>` +
+    r.stats.map(([k, v]) => `<span class="stat">${k} <b>${v}</b></span>`).join("") + `</div>`).join("");
 }
 
 function render() {
@@ -1410,8 +1459,9 @@ function switchTab(name) {
 
 // ---------- Rendering: Codex tab ----------
 function renderCodex() {
-  const cli = state.codex.cli;
-  const cloudData = state.codex.cloud;
+  const month = viewMonth();
+  const cli = state.codex.cli[month];
+  const cloudData = state.codex.cloud[month];
   // --- CLI: cards + daily + by-model ---
   const cliPanel = document.getElementById("codexCliPanel");
   if (cli && cli.monthly && cli.monthly.totals) {
@@ -1423,7 +1473,7 @@ function renderCodex() {
     const cards = [
       { label: "Sessions", value: (t.sessions || 0).toLocaleString(), sub: cli.monthly.month },
       { label: "Total Tokens", value: fmtTokens(t.total), sub: `${fmtTokens(t.input)} in / ${fmtTokens(t.output)} out` },
-      { label: "Equiv. API $", value: (partial ? "~" : "") + fmtUSD(t.cost_usd), sub: partial ? `unpriced: ${cli.monthly.unpriced_models.join(", ")}` : "at official API rates" },
+      { label: "Equiv. API $", value: fmtUSD(t.cost_usd), sub: partial ? `excl. ${cli.monthly.unpriced_models.join(", ")}` : "at official API rates" },
       { label: "Cache Hit %", value: pct((t.cache_hit_pct || 0) / 100), sub: `${fmtTokens(t.cached_input)} cached input` },
     ];
     document.getElementById("codexCliCards").innerHTML = cards.map(c =>
@@ -1540,80 +1590,98 @@ async function fetchJson(url) {
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.json();
 }
-async function loadBundled(month) {
+// Concatenate several same-shape ccusage JSONs into one payload (asArray finds
+// the inner daily/monthly/session array in each — different months stack up).
+function combinePayloads(jsons) { return { data: jsons.flatMap(j => asArray(j)) }; }
+
+async function resolveMonths(monthArg) {
+  let idx = null;
+  try { idx = await fetchJson("./data/manifest.json"); } catch { /* none */ }
+  if (monthArg === "all") return (idx && Array.isArray(idx.months)) ? idx.months.slice().sort() : [];
+  if (!monthArg || monthArg === "latest") return [(idx && idx.latest) || "latest"];
+  return [monthArg];
+}
+
+// Load one or many months. Claude (direct+relay) is concatenated across months
+// so the Monthly Trend can compare; Codex/Cursor are stored per-month.
+async function loadMonths(monthArg) {
   const status = document.getElementById("bundledStatus");
   status.style.color = "var(--muted)";
+  status.textContent = "Loading…";
   try {
-    // Resolve "latest" → concrete month via the manifest (the data/latest
-    // symlink is gone; the manifest is the single source of truth now).
-    let slug = month || "latest";
-    if (slug === "latest") {
-      try { const idx = await fetchJson("./data/manifest.json"); slug = idx.latest || slug; } catch { /* keep slug */ }
+    const months = await resolveMonths(monthArg);
+    if (!months.length) throw new Error("no months in manifest");
+    const dL = [], mL = [], sL = [], rdL = [], rmL = [], rsL = [];
+    let relayAny = false, codexAny = false, cursorCostAny = false;
+    state.codex = { cli: {}, cloud: {} };
+    state.cursorCost = {};
+    for (const mo of months) {
+      try {
+        const [d, m, s] = await Promise.all([
+          fetchJson(`./data/claude/direct/${mo}/daily.json`),
+          fetchJson(`./data/claude/direct/${mo}/monthly.json`),
+          fetchJson(`./data/claude/direct/${mo}/session.json`),
+        ]);
+        dL.push(d); mL.push(m); sL.push(s);
+      } catch { /* this month has no direct data */ }
+      try {
+        const [rd, rm, rs] = await Promise.all([
+          fetchJson(`./data/claude/relay/${mo}/daily.json`),
+          fetchJson(`./data/claude/relay/${mo}/monthly.json`),
+          fetchJson(`./data/claude/relay/${mo}/session.json`),
+        ]);
+        rdL.push(rd); rmL.push(rm); rsL.push(rs); relayAny = true;
+      } catch { /* optional */ }
+      try {
+        const [cm, cd] = await Promise.all([
+          fetchJson(`./data/codex/cli/${mo}/monthly.json`),
+          fetchJson(`./data/codex/cli/${mo}/daily.json`),
+        ]);
+        state.codex.cli[mo] = { monthly: cm, daily: cd }; codexAny = true;
+      } catch { /* optional */ }
+      try { state.codex.cloud[mo] = await fetchJson(`./data/codex/cloud/${mo}.json`); codexAny = true; } catch { /* optional */ }
+      try { state.cursorCost[mo] = await fetchJson(`./data/cursor/${mo}.json`); cursorCostAny = true; } catch { /* optional */ }
     }
-    status.textContent = `Loading ./data/claude/direct/${slug}/…`;
-    const [d, m, s] = await Promise.all([
-      fetchJson(`./data/claude/direct/${slug}/daily.json`),
-      fetchJson(`./data/claude/direct/${slug}/monthly.json`),
-      fetchJson(`./data/claude/direct/${slug}/session.json`),
-    ]);
-    ingest("daily", d, false);
-    ingest("monthly", m, false);
-    ingest("session", s, false);
-    // Relay (optional): same shape, under data/claude/relay/<month>/. Soft-fail if absent.
-    let relayNote = "";
-    try {
-      const [rd, rm, rs] = await Promise.all([
-        fetchJson(`./data/claude/relay/${slug}/daily.json`),
-        fetchJson(`./data/claude/relay/${slug}/monthly.json`),
-        fetchJson(`./data/claude/relay/${slug}/session.json`),
-      ]);
-      ingest("relay-daily", rd, false);
-      ingest("relay-monthly", rm, false);
-      ingest("relay-session", rs, false);
-      relayNote = ` + relay`;
-    } catch { /* optional */ }
-    // Cursor CSV is optional and not month-partitioned (one rolling export).
+    if (dL.length) {
+      ingest("daily", combinePayloads(dL), false);
+      ingest("monthly", combinePayloads(mL), false);
+      ingest("session", combinePayloads(sL), false);
+    }
+    if (relayAny) {
+      ingest("relay-daily", combinePayloads(rdL), false);
+      ingest("relay-monthly", combinePayloads(rmL), false);
+      ingest("relay-session", combinePayloads(rsL), false);
+    }
+    // Cursor CSV is a single rolling export (not month-partitioned).
     let cursorNote = "";
     try {
       const r = await fetch("./data/cursor/usage.csv", { cache: "no-store" });
-      if (r.ok) {
-        ingest("cursor", await r.text(), false);
-        cursorNote = ` + cursor (${state.cursor.length} events)`;
-      }
+      if (r.ok) { ingest("cursor", await r.text(), false); cursorNote = ` · cursor ${state.cursor.length}`; }
     } catch { /* optional */ }
-    // Codex CLI (optional): tokens + equivalent $ under data/codex/cli/<month>/.
-    let codexNote = "";
-    state.codex = { cli: null, cloud: null };
-    try {
-      const [cm, cd] = await Promise.all([
-        fetchJson(`./data/codex/cli/${slug}/monthly.json`),
-        fetchJson(`./data/codex/cli/${slug}/daily.json`),
-      ]);
-      state.codex.cli = { monthly: cm, daily: cd };
-      codexNote = ` + codex`;
-    } catch { /* optional */ }
-    // Codex cloud (optional): per-surface credit-percent under data/codex/cloud/<month>.json.
-    try {
-      state.codex.cloud = await fetchJson(`./data/codex/cloud/${slug}.json`);
-      if (!codexNote) codexNote = ` + codex`;
-      codexNote += "/cloud";
-    } catch { /* optional */ }
-    // Cursor priced summary (optional): data/cursor/<month>.json (equivalent $).
-    state.cursorCost = null;
-    try { state.cursorCost = await fetchJson(`./data/cursor/${slug}.json`); } catch { /* optional */ }
+    // Land on the most recent loaded month so the summary/featured show it.
+    if (months.length) state.filters.month = months[months.length - 1];
     saveCache();
     render();
-    status.textContent = `Loaded ./data/ ${slug}${relayNote}${cursorNote}${cursorNote && state.cursorCost ? " ($)" : ""}`;
+    const span = months.length > 1 ? `${months[0]}…${months[months.length - 1]} (${months.length} mo)` : months[0];
+    status.textContent = `Loaded ${span}${relayAny ? " · relay" : ""}${codexAny ? " · codex" : ""}${cursorNote}${cursorCostAny ? " ($)" : ""}`;
     status.style.color = "var(--accent-2)";
+    document.getElementById("loadPanel").removeAttribute("open"); // tuck the loader away once data's in
   } catch (err) {
     const isFileScheme = location.protocol === "file:";
     status.style.color = "var(--bad)";
-    if (isFileScheme) {
-      status.textContent = "Browsers block fetch over file://. Run bin/serve.sh and reopen via http://localhost:8765/";
-    } else {
-      status.textContent = `Could not load: ${err.message}. Run bin/import-claude.sh ${month && month !== "latest" ? month : ""} first?`;
-    }
+    status.textContent = isFileScheme
+      ? "Browsers block fetch over file://. Run bin/serve.sh and open via http://localhost:8765/"
+      : `Could not load: ${err.message}`;
   }
+}
+function loadBundled(month) { return loadMonths(month); }
+function loadAll() { return loadMonths("all"); }
+// The month a per-month source (Codex/Cursor) should display: the filter month,
+// else the most recent month for which we loaded anything.
+function viewMonth() {
+  if (state.filters.month) return state.filters.month;
+  const ms = new Set([...Object.keys(state.codex.cli), ...Object.keys(state.cursorCost), ...state.monthly.map(m => m.month)]);
+  return Array.from(ms).sort().pop() || "";
 }
 async function discoverBundledMonths() {
   // The importers regenerate data/manifest.json as {months, latest, sources}.
@@ -1633,6 +1701,7 @@ document.getElementById("loadBundledBtn").addEventListener("click", () => {
   const sel = document.getElementById("bundledMonthSelect");
   loadBundled(sel.value);
 });
+document.getElementById("loadAllBtn").addEventListener("click", () => loadAll());
 
 document.getElementById("clearBtn").addEventListener("click", clearAll);
 document.getElementById("sourceSelect").addEventListener("change", e => {
