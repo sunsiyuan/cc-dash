@@ -80,17 +80,28 @@
   .reuse-warn { background: rgba(255, 184, 107, 0.18); color: var(--warn); }
   .reuse-bad  { background: rgba(255, 107, 138, 0.18); color: var(--bad); }
   .reuse-neutral { background: var(--panel-2); color: var(--muted); }
+  .tabs { display: flex; gap: 6px; margin: 18px 0 14px; border-bottom: 1px solid var(--border); }
+  .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: 15px; font-weight: 600; padding: 8px 16px; cursor: pointer; border-radius: 0; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .surface-bar { display: flex; height: 26px; border-radius: 6px; overflow: hidden; margin: 4px 0 12px; border: 1px solid var(--border); }
+  .surface-bar > span { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #0a0c10; white-space: nowrap; overflow: hidden; }
+  .surface-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .surface-legend .row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .surface-legend .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 </style>
 </head>
 <body>
 <div class="container">
 
-  <h1>ccusage Dashboard</h1>
+  <h1>cc-dash</h1>
 
   <div class="panel">
     <details>
       <summary>How to export data from ccusage</summary>
-      <p>Run these commands locally, then upload the resulting JSON files below — or use <code>bin/refresh.sh</code> if you cloned the cc-dash repo:</p>
+      <p>Run these commands locally, then upload the resulting JSON files below — or use <code>bin/import-claude.sh</code> if you cloned the cc-dash repo:</p>
       <pre class="mono" style="background:#0a0c10;padding:12px;border-radius:6px;overflow:auto"><code>npx ccusage@latest daily --json &gt; daily.json
 npx ccusage@latest monthly --json &gt; monthly.json
 npx ccusage@latest session --json &gt; session.json</code></pre>
@@ -160,6 +171,15 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     </div>
   </div>
 
+  <!-- Per-tool tabs. Month filter applies to all; Source/Project/model toggle are Claude-only. -->
+  <div class="tabs" id="toolTabs">
+    <button class="tab-btn active" data-tab="claude">Claude</button>
+    <button class="tab-btn" data-tab="codex">Codex</button>
+    <button class="tab-btn" data-tab="cursor">Cursor</button>
+  </div>
+
+  <div id="tab-claude" class="tab-panel active">
+
   <!-- Featured month summary -->
   <div class="panel" id="featuredPanel">
     <h2><span id="featuredTitle">April Totals</span></h2>
@@ -211,6 +231,41 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <div id="projectsWrap"></div>
   </div>
 
+  </div><!-- /tab-claude -->
+
+  <div id="tab-codex" class="tab-panel">
+    <div class="panel" id="codexCliPanel">
+      <h2><span id="codexCliTitle">Codex CLI</span></h2>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
+        Local <code>~/.codex</code> session logs (this machine + any folded-in others). Cost is an <em>equivalent API cost</em> — Codex bills via a ChatGPT subscription. OpenAI reports cached input but not cache writes, so there's no reuse × (only a hit rate).
+      </div>
+      <div class="grid cols-4" id="codexCliCards"></div>
+      <hr class="sep" />
+      <div class="grid cols-2">
+        <div>
+          <h2>Daily Trend</h2>
+          <div class="chart-wrap" style="height:240px"><canvas id="codexDailyChart"></canvas></div>
+        </div>
+        <div>
+          <h2>By Model</h2>
+          <div class="chart-wrap" style="height:240px"><canvas id="codexModelChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="codexCloudPanel">
+      <h2>Codex Cloud — Usage Breakdown</h2>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
+        From the ChatGPT web backend (unofficial). Values are credits as a <em>percent of your plan window</em>, not tokens/$ — a distribution of where your Codex usage went across surfaces. Cloud surfaces (GitHub Code Review, Exec, Desktop) aren't in the local CLI logs.
+      </div>
+      <div id="codexCloudSurface"></div>
+      <hr class="sep" />
+      <h2>Code Review</h2>
+      <div class="grid cols-4" id="codexCloudReview"></div>
+    </div>
+  </div><!-- /tab-codex -->
+
+  <div id="tab-cursor" class="tab-panel">
   <div class="panel" id="cursorPanel" style="display:none">
     <h2>Cursor Activity</h2>
     <div style="color:var(--muted);font-size:12px;margin-bottom:14px">
@@ -232,6 +287,11 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     <h2>Top Days by Total Tokens</h2>
     <div id="cursorTopDaysWrap"></div>
   </div>
+  <div class="panel" id="cursorEmpty" style="display:none">
+    <h2>Cursor Activity</h2>
+    <div class="empty">No Cursor data loaded for this month. Run <code>bin/import-cursor.sh &lt;export.csv&gt;</code>.</div>
+  </div>
+  </div><!-- /tab-cursor -->
 
 </div>
 
@@ -260,6 +320,9 @@ const state = {
   daily: [], monthly: [], sessions: [],
   rawCursor: null,
   cursor: [],
+  cursorCost: null,        // data/cursor/<month>.json (priced equivalent-$ summary)
+  codex: { cli: null, cloud: null },  // cli = {monthly, daily}; cloud = data/codex/cloud/<month>.json
+  activeTab: "claude",
   filters: {
     month: "",
     project: "",
@@ -268,7 +331,7 @@ const state = {
   },
 };
 
-const charts = { monthly: null, daily: null, model: null, cacheRate: null, cursorDaily: null, cursorModel: null };
+const charts = { monthly: null, daily: null, model: null, cacheRate: null, cursorDaily: null, cursorModel: null, codexDaily: null, codexModel: null };
 
 // ---------- Utilities ----------
 function fmtTokens(n) {
@@ -356,7 +419,7 @@ function normalizeModels(r) {
 function normalizeDaily(json) {
   const arr = asArray(json, "daily");
   return arr.map(r => {
-    const date = String(get(r, "date", "day") || "");
+    const date = String(get(r, "date", "day", "period") || "");
     const t = normalizeRecordTokens(r);
     return { date, month: normalizeMonth(date), ...t, models: normalizeModels(r) };
   }).filter(r => r.date);
@@ -364,7 +427,7 @@ function normalizeDaily(json) {
 function normalizeMonthly(json) {
   const arr = asArray(json, "monthly");
   return arr.map(r => {
-    const month = normalizeMonth(get(r, "month", "date") || "");
+    const month = normalizeMonth(get(r, "month", "date", "period") || "");
     const t = normalizeRecordTokens(r);
     return { month, ...t, models: normalizeModels(r) };
   }).filter(r => r.month);
@@ -457,6 +520,8 @@ function saveCache() {
         session: state.sources.relay.rawSession,
       },
       cursor: state.rawCursor,
+      cursorCost: state.cursorCost,
+      codex: state.codex,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch (e) { /* ignore quota */ }
@@ -478,6 +543,8 @@ function loadCache() {
       if (p.relay.session) { ingest("relay-session", p.relay.session, true); any = true; }
     }
     if (p.cursor) { ingest("cursor", p.cursor, true); any = true; }
+    if (p.cursorCost) { state.cursorCost = p.cursorCost; any = true; }
+    if (p.codex) { state.codex = p.codex; any = true; }
     if (any) document.getElementById("cacheBadge").style.display = "";
     return any;
   } catch (e) { /* ignore */ }
@@ -488,6 +555,8 @@ function clearAll() {
   state.sources.direct = emptySource();
   state.sources.relay = emptySource();
   state.rawCursor = null;
+  state.cursorCost = null;
+  state.codex = { cli: null, cloud: null };
   state.daily = []; state.monthly = []; state.sessions = []; state.cursor = [];
   document.querySelectorAll(".upload-cell").forEach(c => {
     c.classList.remove("loaded");
@@ -1116,8 +1185,10 @@ function filteredCursor() {
 
 function renderCursor() {
   const panel = document.getElementById("cursorPanel");
-  if (!state.cursor.length) { panel.style.display = "none"; return; }
+  const empty = document.getElementById("cursorEmpty");
+  if (!state.cursor.length) { panel.style.display = "none"; if (empty) empty.style.display = ""; return; }
   panel.style.display = "";
+  if (empty) empty.style.display = "none";
 
   const events = filteredCursor();
   const sums = events.reduce((a, e) => {
@@ -1127,12 +1198,17 @@ function renderCursor() {
   const inputSide = sums.input + sums.cacheCreate + sums.cacheRead;
   const hitRate = inputSide > 0 ? sums.cacheRead / inputSide : 0;
   const reuse = sums.cacheCreate > 0 ? sums.cacheRead / sums.cacheCreate : 0;
+  // Equivalent API $ from the priced summary (data/cursor/<month>.json), when it
+  // covers the selected month. Cursor itself bills via subscription ("Included").
+  const cc = state.cursorCost;
+  const costMatches = cc && cc.totals && (!state.filters.month || cc.month === state.filters.month);
+  const costPartial = cc && cc.unpriced_models && cc.unpriced_models.length;
 
   const cards = [
     { label: "Events", value: events.length.toLocaleString(), sub: state.filters.month ? `in ${monthLabel(state.filters.month)}` : "all months" },
-    { label: "Total Tokens", value: fmtTokens(sums.total), sub: sums.total.toLocaleString() },
+    { label: "Total Tokens", value: fmtTokens(sums.total), sub: `hit ${pct(hitRate)} · reuse ${reuse > 0 ? reuse.toFixed(1) + "×" : "—"}` },
+    { label: "Equiv. API $", value: costMatches ? (costPartial ? "~" : "") + fmtUSD(cc.totals.cost_usd) : "—", sub: costMatches ? (costPartial ? `excl. ${cc.unpriced_models.join(", ")}` : "billed as Included; priced at API rates") : "run import-cursor.sh" },
     { label: "Cache Hit Rate", value: pct(hitRate), sub: `${fmtTokens(sums.cacheRead)} / ${fmtTokens(inputSide)}` },
-    { label: "Reuse Multiplier", value: reuse > 0 ? reuse.toFixed(1) + "×" : "—", sub: "cache reads ÷ cache writes" },
   ];
   document.getElementById("cursorCards").innerHTML = cards.map(c =>
     `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
@@ -1227,14 +1303,128 @@ function renderCursor() {
 // ---------- Master render ----------
 function render() {
   refreshFilters();
-  renderFeatured();
-  renderMonthlyChart();
-  renderDailyChart();
-  renderModelChart();
-  renderProjects();
-  renderCacheAnalysis();
-  renderCursor();
-  syncMonthlyDetails();
+  // Render only the active tab so Chart.js sizes canvases against a visible
+  // container (a chart built inside display:none collapses to 0 height).
+  if (state.activeTab === "claude") {
+    renderFeatured();
+    renderMonthlyChart();
+    renderDailyChart();
+    renderModelChart();
+    renderProjects();
+    renderCacheAnalysis();
+    syncMonthlyDetails();
+  } else if (state.activeTab === "codex") {
+    renderCodex();
+  } else if (state.activeTab === "cursor") {
+    renderCursor();
+  }
+}
+
+function switchTab(name) {
+  state.activeTab = name;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === `tab-${name}`));
+  render();
+}
+
+// ---------- Rendering: Codex tab ----------
+function renderCodex() {
+  const cli = state.codex.cli;
+  const cloudData = state.codex.cloud;
+  // --- CLI: cards + daily + by-model ---
+  const cliPanel = document.getElementById("codexCliPanel");
+  if (cli && cli.monthly && cli.monthly.totals) {
+    cliPanel.style.display = "";
+    const t = cli.monthly.totals;
+    document.getElementById("codexCliTitle").textContent =
+      `Codex CLI — ${monthLabel(cli.monthly.month)}`;
+    const partial = cli.monthly.unpriced_models && cli.monthly.unpriced_models.length;
+    const cards = [
+      { label: "Sessions", value: (t.sessions || 0).toLocaleString(), sub: cli.monthly.month },
+      { label: "Total Tokens", value: fmtTokens(t.total), sub: `${fmtTokens(t.input)} in / ${fmtTokens(t.output)} out` },
+      { label: "Equiv. API $", value: (partial ? "~" : "") + fmtUSD(t.cost_usd), sub: partial ? `unpriced: ${cli.monthly.unpriced_models.join(", ")}` : "at official API rates" },
+      { label: "Cache Hit %", value: pct((t.cache_hit_pct || 0) / 100), sub: `${fmtTokens(t.cached_input)} cached input` },
+    ];
+    document.getElementById("codexCliCards").innerHTML = cards.map(c =>
+      `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+    ).join("");
+
+    const th = chartTheme();
+    const days = (cli.daily && cli.daily.daily || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+    destroyChart("codexDaily");
+    charts.codexDaily = new Chart(document.getElementById("codexDailyChart").getContext("2d"), {
+      data: {
+        labels: days.map(d => d.date.slice(5)),
+        datasets: [
+          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#5ee3c0", yAxisID: "y" },
+          { type: "line", label: "Equiv $", data: days.map(d => d.cost_usd), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
+        ],
+      },
+      options: {
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: th.text } }, tooltip: { callbacks: { label: c => c.dataset.yAxisID === "y" ? `Tokens: ${fmtTokens(c.parsed.y)}` : `Equiv: ${fmtUSD(c.parsed.y)}` } } },
+        scales: {
+          x: { ticks: { color: th.tick }, grid: { color: th.grid } },
+          y: { position: "left", ticks: { color: th.tick, callback: v => fmtTokens(v) }, grid: { color: th.grid } },
+          y1: { position: "right", ticks: { color: th.tick, callback: v => fmtUSD(v) }, grid: { drawOnChartArea: false }, beginAtZero: true },
+        },
+      },
+    });
+
+    const models = (cli.monthly.by_model || []).slice().sort((a, b) => b.total - a.total);
+    destroyChart("codexModel");
+    charts.codexModel = new Chart(document.getElementById("codexModelChart").getContext("2d"), {
+      type: "bar",
+      data: { labels: models.map(m => m.model), datasets: [{ label: "Total Tokens", data: models.map(m => m.total), backgroundColor: palette(models.length) }] },
+      options: {
+        indexAxis: "y", maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => { const m = models[c.dataIndex]; return `${fmtTokens(m.total)} · ${m.cost_usd == null ? "unpriced" : fmtUSD(m.cost_usd)} · ${m.sessions} sess`; } } } },
+        scales: { x: { ticks: { color: th.tick, callback: v => fmtTokens(v) }, grid: { color: th.grid } }, y: { ticks: { color: th.tick }, grid: { color: th.grid } } },
+      },
+    });
+  } else {
+    cliPanel.style.display = "none";
+  }
+
+  // --- Cloud: surface share bar + code-review metrics ---
+  const cloudPanel = document.getElementById("codexCloudPanel");
+  if (cloudData && cloudData.surface_share_pct && Object.keys(cloudData.surface_share_pct).length) {
+    cloudPanel.style.display = "";
+    const share = cloudData.surface_share_pct;
+    const labels = { github_code_review: "GitHub Code Review", cli: "CLI", exec: "Exec", desktop_app: "Desktop App", web: "Web", vscode: "VS Code" };
+    const entries = Object.entries(share).sort((a, b) => b[1] - a[1]);
+    const colors = palette(entries.length);
+    const bar = entries.map(([k, v], i) => `<span style="width:${v}%;background:${colors[i]}" title="${labels[k] || k}: ${v}%">${v >= 8 ? v + "%" : ""}</span>`).join("");
+    const legend = entries.map(([k, v], i) =>
+      `<div class="row"><span class="dot" style="background:${colors[i]}"></span>${labels[k] || k} <b style="margin-left:auto;color:var(--text)">${v}%</b></div>`
+    ).join("");
+    document.getElementById("codexCloudSurface").innerHTML =
+      `<div class="surface-bar">${bar}</div><div class="surface-legend">${legend}</div>`;
+
+    const cr = cloudData.code_review;
+    if (cr) {
+      const cards = [
+        { label: "PRs Reviewed", value: (cr.n_reviews || 0).toLocaleString(), sub: `${cr.active_days || 0} active days` },
+        { label: "Comments", value: (cr.n_comments || 0).toLocaleString(), sub: `${cr.n_replies || 0} replies` },
+        { label: "By Severity", value: `${cr.n_comments_p1 || 0}·${cr.n_comments_p2 || 0}`, sub: `P0 ${cr.n_comments_p0 || 0} / P1 / P2` },
+        { label: "Surface Leader", value: (labels[entries[0][0]] || entries[0][0]).split(" ")[0], sub: `${entries[0][1]}% of credits` },
+      ];
+      document.getElementById("codexCloudReview").innerHTML = cards.map(c =>
+        `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+      ).join("");
+    } else {
+      document.getElementById("codexCloudReview").innerHTML = `<div class="empty">No code-review metrics for this month.</div>`;
+    }
+  } else {
+    cloudPanel.style.display = "none";
+  }
+
+  if (cliPanel.style.display === "none" && cloudPanel.style.display === "none") {
+    cliPanel.style.display = "";
+    document.getElementById("codexCliTitle").textContent = "Codex CLI";
+    document.getElementById("codexCliCards").innerHTML = `<div class="empty">No Codex data for this month. Run <code>bin/import-codex.sh</code> (CLI) or <code>bin/import-codex-cloud.sh</code> (cloud).</div>`;
+    destroyChart("codexDaily"); destroyChart("codexModel");
+  }
 }
 
 // Auto-collapse Monthly Trend when there's nothing trending yet (≤1 month).
@@ -1310,9 +1500,29 @@ async function loadBundled(month) {
         cursorNote = ` + cursor (${state.cursor.length} events)`;
       }
     } catch { /* optional */ }
+    // Codex CLI (optional): tokens + equivalent $ under data/codex/cli/<month>/.
+    let codexNote = "";
+    state.codex = { cli: null, cloud: null };
+    try {
+      const [cm, cd] = await Promise.all([
+        fetchJson(`./data/codex/cli/${slug}/monthly.json`),
+        fetchJson(`./data/codex/cli/${slug}/daily.json`),
+      ]);
+      state.codex.cli = { monthly: cm, daily: cd };
+      codexNote = ` + codex`;
+    } catch { /* optional */ }
+    // Codex cloud (optional): per-surface credit-percent under data/codex/cloud/<month>.json.
+    try {
+      state.codex.cloud = await fetchJson(`./data/codex/cloud/${slug}.json`);
+      if (!codexNote) codexNote = ` + codex`;
+      codexNote += "/cloud";
+    } catch { /* optional */ }
+    // Cursor priced summary (optional): data/cursor/<month>.json (equivalent $).
+    state.cursorCost = null;
+    try { state.cursorCost = await fetchJson(`./data/cursor/${slug}.json`); } catch { /* optional */ }
     saveCache();
     render();
-    status.textContent = `Loaded ./data/claude/direct/${slug}/${relayNote}${cursorNote}`;
+    status.textContent = `Loaded ./data/ ${slug}${relayNote}${cursorNote}${cursorNote && state.cursorCost ? " ($)" : ""}`;
     status.style.color = "var(--accent-2)";
   } catch (err) {
     const isFileScheme = location.protocol === "file:";
@@ -1351,17 +1561,18 @@ document.getElementById("sourceSelect").addEventListener("change", e => {
 });
 document.getElementById("monthSelect").addEventListener("change", e => {
   state.filters.month = e.target.value;
-  renderFeatured(); renderDailyChart(); renderModelChart();
-  renderCacheAnalysis(); renderCursor();
+  render();
 });
 document.getElementById("projectSelect").addEventListener("change", e => {
   state.filters.project = e.target.value;
-  renderProjects(); renderCacheAnalysis();
+  render();
 });
 document.getElementById("modelToggle").addEventListener("change", e => {
   state.filters.breakdownByModel = e.target.checked;
-  renderMonthlyChart(); renderDailyChart(); renderModelChart();
+  render();
 });
+document.querySelectorAll(".tab-btn").forEach(b =>
+  b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
 // ---------- Init ----------
 loadCache();

@@ -4,6 +4,8 @@ Local static dashboard for AI coding-tool usage — Claude Code (via [ccusage](h
 
 ## What it shows
 
+The dashboard is organized into **`Claude` / `Codex` / `Cursor` tabs** (each tool keeps its own panels — the metrics don't line up across tools, so they aren't force-merged). The **Month** filter applies to all tabs; **Source / Project / break-down-by-model** are Claude-only. Cost is shown as an **equivalent API $** everywhere (ccusage already prices Claude at Anthropic API rates; Codex CLI and Cursor are priced the same way) — Codex cloud is the exception, reported as a credit-percent distribution.
+
 For Claude Code (via ccusage):
 
 - **Featured month cards** — Total tokens, cost USD, cache hit %, reuse ×. The last two are the actionable signals (the cache panel grades you on them).
