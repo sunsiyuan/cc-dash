@@ -15,12 +15,13 @@ For Claude Code (via ccusage):
 
 For Cursor (via the cursor.com CSV export):
 
-- **Cursor activity panel** — events / total tokens / cache hit rate / reuse multiplier, daily activity (tokens + events on dual axes), per-model breakdown, top days. Honors the Month filter. Cost isn't shown — Cursor bills on a subscription so per-event cost is "Included".
+- **Cursor activity panel** — events / total tokens / cache hit rate / reuse multiplier, daily activity (tokens + events on dual axes), per-model breakdown, top days. Honors the Month filter. Cursor bills on a subscription so its CSV reports cost as "Included"; `import-cursor.sh` separately computes an **equivalent API cost** by pricing each model's token split at official per-provider rates (see Cursor section below).
 
 For Codex (via the local CLI session logs):
 
 - `bin/import-codex.sh` aggregates OpenAI Codex CLI usage straight from `~/.codex/sessions/**/*.jsonl` (the `token_count` events, same source ccusage's `@ccusage/codex` reads) into `data/codex/cli/<month>/{daily,monthly}.json` — sessions, input / cached-input / output tokens, cache hit %, and a per-model breakdown.
 - **Cost is an *equivalent API cost***, not your real bill: Codex billed via a ChatGPT subscription is flat-rate, so we price the tokens at OpenAI's published pay-per-token rates to answer "what would this usage cost on the API." Rates live in `config/codex-pricing.json` (auto-seeded with gpt-5.5's official $5 / $0.50 / $30 per-1M input / cached / output; edit to correct or extend). Unpriced models are counted but left uncosted and listed under `unpriced_models`.
+- **Multi-machine.** Codex CLI logs are per-device. To fold another machine's usage into the same per-month totals, drop its `daily.json` (this importer's shape) at `data/codex/imported/<label>/<YYYY-MM>/daily.json`; `import-codex.sh` sums it into the same day/model buckets and re-prices it with your local table, so re-running from `~/.codex` never drops it. (Contrast Claude's relay, which stays a separate toggle-able channel.)
 - **CLI surface only.** Codex's cloud surfaces — *GitHub Code Review*, *Exec*, *Desktop App* (the categories in ChatGPT's "Usage breakdown") — run server-side and write nothing local, so `import-codex.sh` can't see them. For those, see the cloud importer below.
 
 For Codex cloud (via the ChatGPT web backend — **unofficial**):
@@ -52,9 +53,12 @@ cc-dash/
 │   ├── import-codex-cloud.sh      # Codex cloud usage (Code Review/Exec/…) → data/codex/cloud/<month>.json
 │   ├── sync.sh                    # launchd monthly: runs the unattended imports + commits manifest
 │   ├── serve.sh                   # python3 -m http.server + opens the dashboard
-│   └── lib/build-manifest.py      # rescans data/ → data/manifest.json (called by every importer)
+│   └── lib/
+│       ├── build-manifest.py      # rescans data/ → data/manifest.json (called by every importer)
+│       └── price-cursor.py        # prices Cursor CSV events → data/cursor/<month>.json
 ├── config/                        # tracked, except *.auth.sh
-│   ├── codex-pricing.json         # per-model rate table (editable)
+│   ├── codex-pricing.json         # Codex per-model rate table (editable)
+│   ├── cursor-pricing.json        # Cursor per-model rate table (~20 models, editable)
 │   ├── codex-cloud.auth.sh.example
 │   └── codex-cloud.auth.sh        # gitignored — your Bearer + cookie
 ├── launchd/
@@ -66,8 +70,11 @@ cc-dash/
     │   └── relay/<month>/{daily,monthly,session}.json    # same shape from a CC relay (manual)
     ├── codex/
     │   ├── cli/<month>/{daily,monthly}.json              # CLI tokens (+ equivalent $)
+    │   ├── imported/<label>/<month>/daily.json           # other machines' CLI, folded into cli/
     │   └── cloud/<month>.json (+ raw/)                    # per-surface credit-percent
-    ├── cursor/usage.csv           # one rolling export, not month-partitioned
+    ├── cursor/
+    │   ├── usage.csv              # one rolling export (dashboard reads this)
+    │   └── <month>.json           # priced equivalent-$ summary
     └── logs/refresh.log           # launchd stdout/stderr
 ```
 
@@ -167,10 +174,12 @@ Cursor doesn't have a CLI export, so this is manual:
    bin/import-cursor.sh ~/Downloads/cursor-usage-events-2026-05-01.csv
    ```
 
-   That copies the dated export into `data/cursor/` for archive and points `data/cursor/usage.csv` at it (the path the dashboard reads).
+   That copies the dated export into `data/cursor/` for archive, points `data/cursor/usage.csv` at it (the path the dashboard reads), then runs `bin/lib/price-cursor.py` to write a priced summary per month at `data/cursor/<YYYY-MM>.json`.
 3. Refresh the dashboard tab. **Load bundled data** auto-picks up `data/cursor/usage.csv` if present — the Cursor panel only renders when the file exists.
 
 The Cursor CSV is not month-partitioned (it's one rolling export). The dashboard filters rows by the selected month at render time, so picking April will show only April events even if the CSV spans more.
+
+**Equivalent API cost.** Cursor's `Cost` column is always "Included" (subscription). To answer "what would this usage cost on the providers' APIs," `price-cursor.py` prices each event's token split — `Input (w/ Cache Write)` → cache-write, `Input (w/o Cache Write)` → input, `Cache Read` → cache-read, `Output` → output — at official per-model rates in `config/cursor-pricing.json` (~20 models across OpenAI / Anthropic / Google / xAI / Moonshot; effort suffixes like `-high` / `-thinking` are normalized to the base model). Cursor's own `composer*` models have no public API price and are left uncosted (`unpriced_models`). Edit the config to correct or extend rates.
 
 ## Monthly auto-refresh (macOS LaunchAgent)
 

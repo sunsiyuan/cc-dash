@@ -24,4 +24,6 @@ cp "$src" "data/cursor/$(basename "$src")"
 cp "$src" "data/cursor/usage.csv"
 echo "✓ data/cursor/$(basename "$src") archived"
 echo "✓ data/cursor/usage.csv now points to this export"
+# Price the events at official per-model API rates (equivalent cost).
+python3 bin/lib/price-cursor.py
 python3 bin/lib/build-manifest.py

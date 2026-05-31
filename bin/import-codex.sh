@@ -137,6 +137,29 @@ for path in glob.glob(os.path.join(sess_dir, "*/*/*/*.jsonl")):
     b["cached_input"] += cached
     b["output"] += out
 
+# Fold in pre-aggregated CLI exports from other machines (same account, different
+# device) so the per-month numbers cover all your Codex CLI usage. Drop another
+# machine's daily.json under data/codex/imported/<label>/<YYYY-MM>/daily.json;
+# it's summed into the same day/model buckets and re-priced with the local table.
+for dpath in glob.glob(os.path.join("data", "codex", "imported", "*", "*", "daily.json")):
+    ym = os.path.basename(os.path.dirname(dpath))
+    if target != "all" and ym != target:
+        continue
+    try:
+        rows = json.load(open(dpath)).get("daily", [])
+    except Exception:
+        continue
+    for row in rows:
+        ymd = row.get("date")
+        if not ymd:
+            continue
+        for model, bm in (row.get("by_model") or {}).items():
+            b = months[ym][ymd][model]
+            b["sessions"] += bm.get("sessions", 0)
+            b["uncached_input"] += bm.get("uncached_input", 0)
+            b["cached_input"] += bm.get("cached_input", 0)
+            b["output"] += bm.get("output", 0)
+
 def cost_of(model, b):
     p = prices.get(model)
     if not p:

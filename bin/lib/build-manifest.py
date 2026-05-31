@@ -49,13 +49,14 @@ sources = {
                "relay": months_in("claude", "relay")},
     "codex": {"cli": months_in("codex", "cli"),
               "cloud": month_files("codex", "cloud")},
-    "cursor": {"present": os.path.exists(os.path.join(DATA, "cursor", "usage.csv"))},
+    "cursor": {"present": os.path.exists(os.path.join(DATA, "cursor", "usage.csv")),
+               "months": month_files("cursor")},
 }
 
 # Union of every month-partitioned source drives the dashboard's month dropdown.
 all_months = set()
-for prov in ("claude", "codex"):
-    for chan in sources[prov].values():
+for prov in sources.values():
+    for chan in prov.values():
         if isinstance(chan, list):
             all_months.update(chan)
 months = sorted(all_months)
