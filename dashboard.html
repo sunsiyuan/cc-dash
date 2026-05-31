@@ -16,11 +16,30 @@
     --accent-2: #5be3c0;
     --warn: #ffb86b;
     --bad: #ff6b8a;
+    --code-bg: #0a0c10;
+    --chart-grid: rgba(255,255,255,0.06);
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --panel-2: #f0f2f6;
+    --border: #d9dee7;
+    --text: #1a1e27;
+    --muted: #5c6573;
+    --accent: #3b5bdb;
+    --accent-2: #0ca678;
+    --warn: #e8590c;
+    --bad: #e03131;
+    --code-bg: #eef1f5;
+    --chart-grid: rgba(0,0,0,0.08);
   }
   * { box-sizing: border-box; }
-  html, body { background: var(--bg); color: var(--text); margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; }
+  html, body { background: var(--bg); color: var(--text); margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 14px; transition: background 0.15s, color 0.15s; }
   a { color: var(--accent); }
-  code { background: #0a0c10; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  #themeToggle { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  #themeToggle:hover { color: var(--text); border-color: var(--accent); }
   h1, h2, h3 { margin: 0 0 12px; }
   h1 { font-size: 22px; }
   h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 0; }
@@ -96,7 +115,10 @@
 <body>
 <div class="container">
 
-  <h1>cc-dash</h1>
+  <div class="topbar">
+    <h1>cc-dash</h1>
+    <button id="themeToggle" title="Toggle light / dark">🌙 Dark</button>
+  </div>
 
   <div class="panel">
     <details>
@@ -745,10 +767,12 @@ function destroyChart(name) {
   if (charts[name]) { charts[name].destroy(); charts[name] = null; }
 }
 function chartTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name, fallback) => (cs.getPropertyValue(name).trim() || fallback);
   return {
-    grid: "rgba(255,255,255,0.06)",
-    tick: "#8a93a6",
-    text: "#e6e8ee",
+    grid: v("--chart-grid", "rgba(255,255,255,0.06)"),
+    tick: v("--muted", "#8a93a6"),
+    text: v("--text", "#e6e8ee"),
   };
 }
 
@@ -885,7 +909,7 @@ function dualAxisOptions(t) {
   return {
     maintainAspectRatio: false,
     plugins: {
-      legend: { labels: { color: "#e6e8ee" } },
+      legend: { labels: { color: chartTheme().text } },
       tooltip: { callbacks: { label: (c) => {
         const v = c.parsed.y;
         return c.dataset.yAxisID === "y1" ? `${c.dataset.label}: ${fmtUSD(v)}` : `${c.dataset.label}: ${fmtTokens(v)}`;
@@ -1049,7 +1073,7 @@ function renderCacheAnalysis() {
     options: {
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#e6e8ee" } },
+        legend: { labels: { color: chartTheme().text } },
         tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
       },
       scales: {
@@ -1237,7 +1261,7 @@ function renderCursor() {
     options: {
       maintainAspectRatio: false,
       plugins: {
-        legend: { labels: { color: "#e6e8ee" } },
+        legend: { labels: { color: chartTheme().text } },
         tooltip: { callbacks: { label: c => c.dataset.yAxisID === "y" ? `Tokens: ${fmtTokens(c.parsed.y)}` : `Events: ${c.parsed.y}` } },
       },
       scales: {
@@ -1574,7 +1598,27 @@ document.getElementById("modelToggle").addEventListener("change", e => {
 document.querySelectorAll(".tab-btn").forEach(b =>
   b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
+// ---------- Theme ----------
+const THEME_KEY = "cc_dash_theme";
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = theme === "light" ? "☀️ Light" : "🌙 Dark";
+}
+function initTheme() {
+  let t = "dark";
+  try { t = localStorage.getItem(THEME_KEY) || "dark"; } catch { /* ignore */ }
+  applyTheme(t);
+}
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+  render();  // re-render the active tab's charts with the new theme colors
+});
+
 // ---------- Init ----------
+initTheme();
 loadCache();
 render();
 discoverBundledMonths();
