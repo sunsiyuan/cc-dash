@@ -63,7 +63,7 @@
   h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-top: 0; }
   .container { max-width: 1200px; margin: 0 auto; padding: 32px 28px 64px; }
   .panel { background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--radius); padding: 22px; margin-bottom: 20px; }
-  .grid { display: grid; gap: 16px; }
+  .grid { display: grid; gap: 18px; }
   .grid.cols-2 { grid-template-columns: 1fr 1fr; }
   .grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
   .grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
@@ -102,7 +102,7 @@
   details summary { cursor: pointer; color: var(--muted); font-weight: 500; }
   details[open] summary { margin-bottom: 10px; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  hr.sep { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  hr.sep { border: none; border-top: 1px solid var(--border-soft); margin: 24px 0; }
   ul.insights { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
   ul.insights li { padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--border); background: var(--panel-2); font-size: 13px; line-height: 1.5; }
   ul.insights li.good { border-left-color: var(--accent-2); }
@@ -124,13 +124,13 @@
   .tab-panel { display: none; }
   .tab-panel.active { display: block; animation: fadeIn 0.18s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-  .surface-bar { display: flex; height: 28px; border-radius: 8px; overflow: hidden; margin: 4px 0 12px; border: 1px solid var(--border-soft); }
+  .surface-bar { display: flex; height: 28px; border-radius: 8px; overflow: hidden; margin: 16px 0 6px; border: 1px solid var(--border-soft); }
   .surface-bar > span { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #0a0c10; white-space: nowrap; overflow: hidden; }
   .surface-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
   .surface-legend .row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .surface-legend .dot { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-  .overview-detail { display: grid; gap: 6px; margin-top: 14px; }
-  .overview-detail .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12.5px; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .overview-detail { display: grid; gap: 8px; margin-top: 18px; }
+  .overview-detail .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; font-size: 12.5px; padding: 11px 14px; background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 9px; }
   .overview-detail .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
   .overview-detail .tool { font-weight: 700; color: var(--text); min-width: 76px; }
   .overview-detail .stat { color: var(--muted); }
@@ -139,9 +139,13 @@
   .panel, details.panel { box-shadow: var(--shadow); transition: background 0.2s, border-color 0.2s; }
   .card { transition: transform 0.13s ease, border-color 0.13s, box-shadow 0.13s; }
   .card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: var(--shadow); }
-  /* highlight the first overview card (the cross-tool total) */
-  #overviewCards .card:first-child { background: linear-gradient(165deg, color-mix(in srgb, var(--accent) 18%, var(--panel-2)), var(--panel-2) 70%); border-color: color-mix(in srgb, var(--accent) 38%, var(--border)); }
-  #overviewCards .card:first-child .value { color: var(--accent); }
+  /* Hero total row — the "总" above the per-tool "分" cards. */
+  .hero { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; padding: 20px 22px; margin-bottom: 18px;
+          background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, var(--panel-2)), var(--panel-2) 72%);
+          border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border)); border-radius: 12px; }
+  .hero .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; width: 100%; }
+  .hero .big { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .hero .meta { color: var(--muted); font-size: 13px; }
   select, button { transition: border-color 0.13s, background 0.13s, color 0.13s; }
   button:hover { color: var(--text); }
   .chart-wrap { padding-top: 4px; }
@@ -238,8 +242,9 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
   <!-- Cross-tool total (equivalent API $, the one comparable unit). -->
   <div class="panel" id="overviewPanel" style="display:none">
     <h2><span id="overviewTitle">Total Usage</span></h2>
-    <div class="grid cols-4" id="overviewCards"></div>
-    <div class="surface-bar" id="overviewBar" style="margin-bottom:0"></div>
+    <div class="hero" id="overviewTotal"></div>
+    <div class="grid cols-3" id="overviewCards"></div>
+    <div class="surface-bar" id="overviewBar"></div>
     <div class="overview-detail" id="overviewDetail"></div>
   </div>
 
@@ -1398,10 +1403,25 @@ function renderOverview() {
   panel.style.display = "";
   document.getElementById("overviewTitle").textContent = "Total Usage" + (month ? " — " + monthLabel(month) : "");
 
+  // Direct vs relay split (relay is loaded but otherwise hidden behind the Source toggle).
+  const aggOf = (days) => days.reduce((x, d) => { x.cost += d.cost; x.total += d.total; x.input += d.input; x.output += d.output; x.cc += d.cacheCreate; x.cr += d.cacheRead; return x; }, { cost: 0, total: 0, input: 0, output: 0, cc: 0, cr: 0 });
+  const dDays = month ? state.sources.direct.daily.filter(d => d.month === month) : state.sources.direct.daily;
+  const rDays = month ? state.sources.relay.daily.filter(d => d.month === month) : state.sources.relay.daily;
+  const dAgg = aggOf(dDays), rAgg = aggOf(rDays);
+  const hasRelay = rDays.length > 0 || rAgg.cost > 0;
+
+  // 总: one hero row for the cross-tool total.
   const total = (hasClaude ? claudeCost : 0) + (codexCost || 0) + (curCost || 0);
+  const nTools = [hasClaude, codexCost != null, curCost != null].filter(Boolean).length;
+  const relayMeta = hasRelay ? (state.filters.source === "combined" ? " · incl. relay" : " · relay loaded (see below)") : "";
+  document.getElementById("overviewTotal").innerHTML =
+    `<span class="label">Total Equivalent API $ · ${monthLabel(month)}</span>` +
+    `<span class="big">${fmtUSD(total)}</span>` +
+    `<span class="meta">across ${nTools} tool${nTools === 1 ? "" : "s"}${relayMeta}</span>`;
+
+  // 分: one card per tool.
   const cards = [
-    { label: "Total Equiv. $", value: fmtUSD(total), sub: "across tools" },
-    { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? fmtTokens(claudeTok) + " tok" : "not loaded" },
+    { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? `${fmtTokens(claudeTok)} tok · ${state.filters.source}` : "not loaded" },
     { label: "Codex CLI", value: codexCost != null ? fmtUSD(codexCost) : "—", sub: codexM ? fmtTokens(codexM.total) + " tok" : "not loaded" },
     { label: "Cursor", value: curCost != null ? fmtUSD(curCost) : "—", sub: curT ? fmtTokens(curT.total_tokens) + " tok" : "not loaded" },
   ];
@@ -1423,25 +1443,27 @@ function renderOverview() {
   }).join("");
 
   // Per-tool key numbers (input / output / cache / hit / reuse) right in the summary.
-  const rows = [];
-  if (hasClaude) {
-    const a = cDays.reduce((x, d) => { x.input += d.input; x.output += d.output; x.cc += d.cacheCreate; x.cr += d.cacheRead; return x; }, { input: 0, output: 0, cc: 0, cr: 0 });
+  const claudeColor = colorOf["Claude"] || "#7c9cff";
+  const claudeRow = (label, a, color) => {
     const inSide = a.input + a.cc + a.cr;
-    rows.push({ name: "Claude", color: colorOf["Claude"] || "#7c9cff", stats: [
-      ["input", fmtTokens(a.input)], ["output", fmtTokens(a.output)], ["cache read", fmtTokens(a.cr)],
+    return { name: label, color, stats: [
+      ["$", fmtUSD(a.cost)], ["input", fmtTokens(a.input)], ["output", fmtTokens(a.output)], ["cache read", fmtTokens(a.cr)],
       ["hit", pct(inSide ? a.cr / inSide : 0)], ["reuse", a.cc ? (a.cr / a.cc).toFixed(1) + "×" : "—"],
-    ] });
-  }
+    ] };
+  };
+  const rows = [];
+  if (dDays.length) rows.push(claudeRow(hasRelay ? "Claude direct" : "Claude", dAgg, claudeColor));
+  if (hasRelay) rows.push(claudeRow("Claude relay", rAgg, "color-mix(in srgb, " + claudeColor + " 55%, var(--muted))"));
   if (codexM) {
     rows.push({ name: "Codex CLI", color: colorOf["Codex"] || "#5be3c0", stats: [
-      ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
-      ["hit", pct((codexM.cache_hit_pct || 0) / 100)], ["reuse", "— (no cache writes reported)"],
+      ["$", fmtUSD(codexM.cost_usd)], ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
+      ["hit", pct((codexM.cache_hit_pct || 0) / 100)], ["reuse", "—"],
     ] });
   }
   if (curT) {
     const cw = curT.cache_write || 0, ci = curT.input || 0, cr = curT.cache_read || 0, inSide = cw + ci + cr;
     rows.push({ name: "Cursor", color: colorOf["Cursor"] || "#a78bfa", stats: [
-      ["input", fmtTokens(ci)], ["output", fmtTokens(curT.output)], ["cache read", fmtTokens(cr)],
+      ["$", fmtUSD(curT.cost_usd)], ["input", fmtTokens(ci)], ["output", fmtTokens(curT.output)], ["cache read", fmtTokens(cr)],
       ["hit", pct(inSide ? cr / inSide : 0)], ["reuse", cw ? (cr / cw).toFixed(1) + "×" : "—"],
     ] });
   }
