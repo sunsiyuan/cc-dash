@@ -16,10 +16,10 @@
     --border-soft: #1e222c;
     --text: #eceef4;
     --muted: #8b94a7;
-    --accent: #7c9cff;
-    --accent-2: #5be3c0;
-    --warn: #ffb86b;
-    --bad: #ff6b8a;
+    --accent: #f59e0b;
+    --accent-2: #38bdf8;
+    --warn: #fbbf24;
+    --bad: #f43f5e;
     --code-bg: #0a0c10;
     --chart-grid: rgba(255,255,255,0.05);
     --shadow: 0 1px 2px rgba(0,0,0,0.25), 0 8px 24px rgba(0,0,0,0.16);
@@ -33,10 +33,10 @@
     --border-soft: #edf0f5;
     --text: #161a22;
     --muted: #5c6678;
-    --accent: #3b5bdb;
-    --accent-2: #0ca678;
-    --warn: #e8590c;
-    --bad: #e03131;
+    --accent: #ea580c;
+    --accent-2: #0284c7;
+    --warn: #d97706;
+    --bad: #e11d48;
     --code-bg: #eef1f5;
     --chart-grid: rgba(0,0,0,0.07);
     --shadow: 0 1px 2px rgba(15,23,42,0.05), 0 8px 22px rgba(15,23,42,0.06);
@@ -868,7 +868,7 @@ function renderMonthlyChart() {
     }));
     datasets.push({
       label: "Cost (USD)", type: "line", data: data.map(d => d.cost),
-      borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 3,
+      borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 3,
     });
     charts.monthly = new Chart(ctx, {
       data: { labels: months.map(monthLabel), datasets },
@@ -880,7 +880,7 @@ function renderMonthlyChart() {
         labels: data.map(d => monthLabel(d.month)),
         datasets: [
           { type: "bar", label: "Total Tokens", data: data.map(d => d.total), backgroundColor: "#7c9cff", yAxisID: "y" },
-          { type: "line", label: "Cost (USD)", data: data.map(d => d.cost), borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 3 },
+          { type: "line", label: "Cost (USD)", data: data.map(d => d.cost), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 3 },
         ],
       },
       options: dualAxisOptions(t),
@@ -912,7 +912,7 @@ function renderDailyChart() {
     }));
     datasets.push({
       label: "Cost (USD)", type: "line", data: days.map(d => d.cost),
-      borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 2,
+      borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 2,
     });
     charts.daily = new Chart(ctx, {
       data: { labels, datasets },
@@ -923,8 +923,8 @@ function renderDailyChart() {
       data: {
         labels: days.map(d => d.date.slice(5)),
         datasets: [
-          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#5be3c0", yAxisID: "y" },
-          { type: "line", label: "Cost (USD)", data: days.map(d => d.cost), borderColor: "#ffb86b", backgroundColor: "#ffb86b", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
+          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#38bdf8", yAxisID: "y" },
+          { type: "line", label: "Cost (USD)", data: days.map(d => d.cost), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
         ],
       },
       options: dualAxisOptions(t),
@@ -987,7 +987,8 @@ function stackedDualAxisOptions(t) {
 }
 
 function palette(n) {
-  const base = ["#7c9cff", "#5be3c0", "#ffb86b", "#ff6b8a", "#a78bfa", "#34d399", "#f472b6", "#60a5fa", "#fbbf24", "#f87171", "#22d3ee", "#facc15"];
+  // Curated, cohesive categorical palette (even luminance, ordered for adjacency contrast).
+  const base = ["#f59e0b", "#38bdf8", "#a78bfa", "#34d399", "#fb7185", "#fbbf24", "#60a5fa", "#f472b6", "#2dd4bf", "#fb923c"];
   const out = [];
   for (let i = 0; i < n; i++) out.push(base[i % base.length]);
   return out;
@@ -1123,7 +1124,7 @@ function renderCacheAnalysis() {
       datasets: [{
         label: "Cache hit rate",
         data: rates,
-        borderColor: "#5be3c0", backgroundColor: "rgba(91,227,192,0.15)",
+        borderColor: "#38bdf8", backgroundColor: "rgba(91,227,192,0.15)",
         tension: 0.25, pointRadius: 2, fill: true,
       }],
     },
@@ -1413,7 +1414,7 @@ function renderOverview() {
   // 总: one hero row for the cross-tool total.
   const total = (hasClaude ? claudeCost : 0) + (codexCost || 0) + (curCost || 0);
   const nTools = [hasClaude, codexCost != null, curCost != null].filter(Boolean).length;
-  const relayMeta = hasRelay ? (state.filters.source === "combined" ? " · incl. relay" : " · relay loaded (see below)") : "";
+  const relayMeta = (hasRelay && state.filters.source === "combined") ? " · incl. relay" : "";
   document.getElementById("overviewTotal").innerHTML =
     `<span class="label">Total Equivalent API $ · ${monthLabel(month)}</span>` +
     `<span class="big">${fmtUSD(total)}</span>` +
@@ -1455,7 +1456,7 @@ function renderOverview() {
   if (dDays.length) rows.push(claudeRow(hasRelay ? "Claude direct" : "Claude", dAgg, claudeColor));
   if (hasRelay) rows.push(claudeRow("Claude relay", rAgg, "color-mix(in srgb, " + claudeColor + " 55%, var(--muted))"));
   if (codexM) {
-    rows.push({ name: "Codex CLI", color: colorOf["Codex"] || "#5be3c0", stats: [
+    rows.push({ name: "Codex CLI", color: colorOf["Codex"] || "#38bdf8", stats: [
       ["$", fmtUSD(codexM.cost_usd)], ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
       ["hit", pct((codexM.cache_hit_pct || 0) / 100)], ["reuse", "—"],
     ] });
@@ -1529,7 +1530,7 @@ function renderCodex() {
       data: {
         labels: days.map(d => d.date.slice(5)),
         datasets: [
-          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#5ee3c0", yAxisID: "y" },
+          { type: "bar", label: "Total Tokens", data: days.map(d => d.total), backgroundColor: "#38bdf8", yAxisID: "y" },
           { type: "line", label: "Equiv $", data: days.map(d => d.cost_usd), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
         ],
       },
