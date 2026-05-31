@@ -13,7 +13,7 @@
 #
 # Cost is an *equivalent API cost* (what these tokens would cost at OpenAI's
 # pay-per-token API rates) — NOT your real bill, since Codex via a ChatGPT
-# subscription is flat-rate. Prices live in data/codex/pricing.json (auto-
+# subscription is flat-rate. Prices live in config/codex-pricing.json (auto-
 # seeded on first run); edit that file to correct/extend per-model rates.
 #
 # Usage:
@@ -22,7 +22,7 @@
 #   bin/import-codex.sh prev           # previous month relative to today
 #   bin/import-codex.sh all            # every month found
 #
-# Output: data/codex/<YYYY-MM>/{daily,monthly}.json  (+ data/codex/latest symlink)
+# Output: data/codex/cli/<YYYY-MM>/{daily,monthly}.json  (refreshes data/manifest.json)
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ cd "$ROOT"
 
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 SESS_DIR="$CODEX_HOME/sessions"
-PRICING="data/codex/pricing.json"
+PRICING="config/codex-pricing.json"
 
 if [[ ! -d "$SESS_DIR" ]]; then
   echo "no Codex session dir at $SESS_DIR (set CODEX_HOME?)" >&2
@@ -51,7 +51,7 @@ case "${1:-prev}" in
     TARGET="$1" ;;
 esac
 
-mkdir -p data/codex
+mkdir -p data/codex/cli config
 
 # Seed a default pricing table (USD per 1M tokens) on first run. Edit freely;
 # subsequent runs read whatever is here. Rates below are OpenAI's published
@@ -184,7 +184,7 @@ for ym in sorted(months):
                                total=b["uncached_input"] + b["cached_input"] + b["output"],
                                cost_usd=cost_of(model, b)))
 
-    out_dir = os.path.join("data", "codex", ym)
+    out_dir = os.path.join("data", "codex", "cli", ym)
     os.makedirs(out_dir, exist_ok=True)
     monthly = dict(month=ym, source="codex-cli", note="CLI surface only; cloud (Code Review/Exec/Desktop) not included. cost_usd is equivalent API cost, not actual subscription billing.",
                    pricing_source=pricing_path, totals=mtot,
@@ -204,29 +204,6 @@ for ym, t, unpriced in built:
     print(f"✓ {ym}: {t['sessions']} sessions  total={t['total']:,}  "
           f"hit={t['cache_hit_pct']}%  cost={star}${t['cost_usd']:.2f}{warn}")
 
-# Print the newest month for the symlink step below.
-print("LATEST=" + built[-1][0])
 PY
 
-# Capture LATEST printed by the python block to refresh the convenience symlink.
-LATEST="$(python3 - "$SESS_DIR" "$TARGET" <<'PY'
-import os, sys, glob
-sess_dir, target = sys.argv[1], sys.argv[2]
-if target != "all":
-    print(target); raise SystemExit
-months = set()
-for path in glob.glob(os.path.join(sess_dir, "*/*/*/*.jsonl")):
-    parts = path.split(os.sep)
-    try:
-        i = parts.index("sessions")
-        months.add(f"{parts[i+1]}-{parts[i+2]}")
-    except (ValueError, IndexError):
-        pass
-print(sorted(months)[-1] if months else "")
-PY
-)"
-
-if [[ -n "$LATEST" && -d "data/codex/$LATEST" ]]; then
-  ln -sfn "$LATEST" data/codex/latest
-  echo "✓ data/codex/latest -> $LATEST"
-fi
+python3 bin/lib/build-manifest.py

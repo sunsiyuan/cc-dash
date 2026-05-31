@@ -1270,27 +1270,31 @@ async function fetchJson(url) {
   return r.json();
 }
 async function loadBundled(month) {
-  const slug = month || "latest";
   const status = document.getElementById("bundledStatus");
-  status.textContent = `Loading ./data/${slug}/…`;
   status.style.color = "var(--muted)";
   try {
+    // Resolve "latest" → concrete month via the manifest (the data/latest
+    // symlink is gone; the manifest is the single source of truth now).
+    let slug = month || "latest";
+    if (slug === "latest") {
+      try { const idx = await fetchJson("./data/manifest.json"); slug = idx.latest || slug; } catch { /* keep slug */ }
+    }
+    status.textContent = `Loading ./data/claude/direct/${slug}/…`;
     const [d, m, s] = await Promise.all([
-      fetchJson(`./data/${slug}/daily.json`),
-      fetchJson(`./data/${slug}/monthly.json`),
-      fetchJson(`./data/${slug}/session.json`),
+      fetchJson(`./data/claude/direct/${slug}/daily.json`),
+      fetchJson(`./data/claude/direct/${slug}/monthly.json`),
+      fetchJson(`./data/claude/direct/${slug}/session.json`),
     ]);
     ingest("daily", d, false);
     ingest("monthly", m, false);
     ingest("session", s, false);
-    // Relay (optional): same shape, under data/relay/<month>/. Soft-fail if absent.
+    // Relay (optional): same shape, under data/claude/relay/<month>/. Soft-fail if absent.
     let relayNote = "";
     try {
-      const relayMonth = month && month !== "latest" ? month : slug;
       const [rd, rm, rs] = await Promise.all([
-        fetchJson(`./data/relay/${relayMonth}/daily.json`),
-        fetchJson(`./data/relay/${relayMonth}/monthly.json`),
-        fetchJson(`./data/relay/${relayMonth}/session.json`),
+        fetchJson(`./data/claude/relay/${slug}/daily.json`),
+        fetchJson(`./data/claude/relay/${slug}/monthly.json`),
+        fetchJson(`./data/claude/relay/${slug}/session.json`),
       ]);
       ingest("relay-daily", rd, false);
       ingest("relay-monthly", rm, false);
@@ -1308,7 +1312,7 @@ async function loadBundled(month) {
     } catch { /* optional */ }
     saveCache();
     render();
-    status.textContent = `Loaded ./data/${slug}/${relayNote}${cursorNote}`;
+    status.textContent = `Loaded ./data/claude/direct/${slug}/${relayNote}${cursorNote}`;
     status.style.color = "var(--accent-2)";
   } catch (err) {
     const isFileScheme = location.protocol === "file:";
@@ -1316,15 +1320,15 @@ async function loadBundled(month) {
     if (isFileScheme) {
       status.textContent = "Browsers block fetch over file://. Run bin/serve.sh and reopen via http://localhost:8765/";
     } else {
-      status.textContent = `Could not load: ${err.message}. Run bin/refresh.sh ${month && month !== "latest" ? month : ""} first?`;
+      status.textContent = `Could not load: ${err.message}. Run bin/import-claude.sh ${month && month !== "latest" ? month : ""} first?`;
     }
   }
 }
 async function discoverBundledMonths() {
-  // bin/refresh.sh writes data/index.json with {months: [...], latest: "YYYY-MM"}.
-  // Falls back gracefully when index.json is absent (e.g. user just dropped raw files).
+  // The importers regenerate data/manifest.json as {months, latest, sources}.
+  // Falls back gracefully when it's absent (e.g. user just dropped raw files).
   try {
-    const idx = await fetchJson("./data/index.json");
+    const idx = await fetchJson("./data/manifest.json");
     const select = document.getElementById("bundledMonthSelect");
     const months = Array.isArray(idx.months) ? idx.months.slice().sort() : [];
     const opts = ['<option value="latest">latest' + (idx.latest ? ` (${idx.latest})` : "") + "</option>"]

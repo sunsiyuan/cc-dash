@@ -1,16 +1,11 @@
-# Generated ccusage exports — regenerable via bin/refresh.sh and contain
-# personal usage data (project paths, costs). Don't commit the JSON payloads.
-# data/index.json is tracked so the monthly refresh leaves a `git log` audit trail.
+# data/ is regenerable and contains personal usage data (project paths, costs,
+# raw API captures). Ignore all of it except the manifest, which is tracked so
+# each monthly sync leaves a `git log` audit trail of what was produced.
 data/*
-!data/index.json
-# Codex per-model rate table is config (not usage data) — keep it tracked so
-# edits to pricing survive a data/ wipe and leave a git audit trail.
-!data/codex
-data/codex/*
-!data/codex/pricing.json
-!data/codex/cloud
-data/codex/cloud/*
-!data/codex/cloud/.auth.sh.example
+!data/manifest.json
+
+# config/ is tracked (pricing table, auth template) EXCEPT real credentials.
+config/*.auth.sh
 
 # OS / editor cruft
 .DS_Store

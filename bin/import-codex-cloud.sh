@@ -8,7 +8,7 @@
 # UNOFFICIAL: there is no public API for personal accounts. This reuses your
 # logged-in ChatGPT credentials (a Bearer token + cookies) exactly as the web
 # dashboard does. Credentials are short-lived; when they expire you'll get a
-# 401/403 and must refresh them (see data/codex/cloud/.auth.sh.example).
+# 401/403 and must refresh them (see config/codex-cloud.auth.sh.example).
 #
 # Values are OpenAI "credits" rendered as a PERCENT of your plan window
 # (the response says "units": "percent") — a usage *distribution*, NOT tokens
@@ -16,7 +16,7 @@
 # absolute tokens + equivalent $; this one tells you how that splits by surface.
 #
 # Setup (once):
-#   cp data/codex/cloud/.auth.sh.example data/codex/cloud/.auth.sh
+#   cp config/codex-cloud.auth.sh.example config/codex-cloud.auth.sh
 #   # then paste your Bearer + cookie into it (from a browser DevTools "Copy as cURL")
 #
 # Usage:
@@ -33,10 +33,10 @@ cd "$ROOT"
 # CODEX_CLOUD_SKIP_FETCH=1 parses whatever raw responses already exist under
 # data/codex/cloud/raw/ without hitting the network (useful for re-parsing a
 # manually-saved capture, or when your credentials have expired).
-AUTH="data/codex/cloud/.auth.sh"
+AUTH="config/codex-cloud.auth.sh"
 if [[ "${CODEX_CLOUD_SKIP_FETCH:-}" != "1" ]]; then
   if [[ ! -f "$AUTH" ]]; then
-    echo "missing $AUTH — copy data/codex/cloud/.auth.sh.example and fill in your Bearer + cookie" >&2
+    echo "missing $AUTH — copy config/codex-cloud.auth.sh.example and fill in your Bearer + cookie" >&2
     echo "  (or re-run with CODEX_CLOUD_SKIP_FETCH=1 to parse already-saved raw/ captures)" >&2
     exit 1
   fi
@@ -174,3 +174,5 @@ if "code_review" in out:
           f"{cr['n_replies']} replies over {cr['active_days']} active days")
 print(f"\n✓ wrote {dest}")
 PY
+
+python3 bin/lib/build-manifest.py

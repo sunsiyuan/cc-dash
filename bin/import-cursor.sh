@@ -24,3 +24,4 @@ cp "$src" "data/cursor/$(basename "$src")"
 cp "$src" "data/cursor/usage.csv"
 echo "✓ data/cursor/$(basename "$src") archived"
 echo "✓ data/cursor/usage.csv now points to this export"
+python3 bin/lib/build-manifest.py

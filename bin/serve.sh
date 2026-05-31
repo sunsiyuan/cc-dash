@@ -13,7 +13,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 PORT="${1:-8765}"
-URL="http://localhost:$PORT/ccusage-dashboard.html"
+URL="http://localhost:$PORT/dashboard.html"
 
 echo "Serving $ROOT at $URL"
 echo "Ctrl-C to stop."

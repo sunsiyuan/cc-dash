@@ -20,7 +20,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>/Users/USERNAME/utils/cc-dash/bin/refresh-and-commit.sh</string>
+    <string>/Users/USERNAME/utils/cc-dash/bin/sync.sh</string>
   </array>
 
   <key>WorkingDirectory</key>
@@ -37,9 +37,9 @@
   </dict>
 
   <key>StandardOutPath</key>
-  <string>/Users/USERNAME/utils/cc-dash/data/refresh.log</string>
+  <string>/Users/USERNAME/utils/cc-dash/data/logs/refresh.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/USERNAME/utils/cc-dash/data/refresh.log</string>
+  <string>/Users/USERNAME/utils/cc-dash/data/logs/refresh.log</string>
 
   <key>RunAtLoad</key>
   <false/>
