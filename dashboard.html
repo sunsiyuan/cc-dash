@@ -71,7 +71,8 @@
   .card { background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 16px 18px; }
   .card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
   .card .value { font-size: 26px; font-weight: 650; margin-top: 8px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .card .sub { color: var(--muted); font-size: 12px; margin-top: 5px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .card .sub .tok { font-size: 16px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
   .upload-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
   @media (max-width: 700px) { .upload-row { grid-template-columns: 1fr; } }
   .upload-cell { background: var(--panel-2); border: 1px dashed var(--border); border-radius: 8px; padding: 14px; }
@@ -1421,10 +1422,11 @@ function renderOverview() {
     `<span class="meta">across ${nTools} tool${nTools === 1 ? "" : "s"}${relayMeta}</span>`;
 
   // 分: one card per tool.
+  const tok = (n) => `<span class="tok">${fmtTokens(n)}</span> tok`;
   const cards = [
-    { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? `${fmtTokens(claudeTok)} tok · ${state.filters.source}` : "not loaded" },
-    { label: "Codex CLI", value: codexCost != null ? fmtUSD(codexCost) : "—", sub: codexM ? fmtTokens(codexM.total) + " tok" : "not loaded" },
-    { label: "Cursor", value: curCost != null ? fmtUSD(curCost) : "—", sub: curT ? fmtTokens(curT.total_tokens) + " tok" : "not loaded" },
+    { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? `${tok(claudeTok)} · ${state.filters.source}` : "not loaded" },
+    { label: "Codex CLI", value: codexCost != null ? fmtUSD(codexCost) : "—", sub: codexM ? tok(codexM.total) : "not loaded" },
+    { label: "Cursor", value: curCost != null ? fmtUSD(curCost) : "—", sub: curT ? tok(curT.total_tokens) : "not loaded" },
   ];
   document.getElementById("overviewCards").innerHTML = cards.map(c =>
     `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join("");
@@ -1448,7 +1450,7 @@ function renderOverview() {
   const claudeRow = (label, a, color) => {
     const inSide = a.input + a.cc + a.cr;
     return { name: label, color, stats: [
-      ["$", fmtUSD(a.cost)], ["input", fmtTokens(a.input)], ["output", fmtTokens(a.output)], ["cache read", fmtTokens(a.cr)],
+      ["cost", fmtUSD(a.cost)], ["input", fmtTokens(a.input)], ["output", fmtTokens(a.output)], ["cache read", fmtTokens(a.cr)],
       ["hit", pct(inSide ? a.cr / inSide : 0)], ["reuse", a.cc ? (a.cr / a.cc).toFixed(1) + "×" : "—"],
     ] };
   };
@@ -1457,14 +1459,14 @@ function renderOverview() {
   if (hasRelay) rows.push(claudeRow("Claude relay", rAgg, "color-mix(in srgb, " + claudeColor + " 55%, var(--muted))"));
   if (codexM) {
     rows.push({ name: "Codex CLI", color: colorOf["Codex"] || "#38bdf8", stats: [
-      ["$", fmtUSD(codexM.cost_usd)], ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
+      ["cost", fmtUSD(codexM.cost_usd)], ["input", fmtTokens(codexM.input)], ["output", fmtTokens(codexM.output)], ["cached", fmtTokens(codexM.cached_input)],
       ["hit", pct((codexM.cache_hit_pct || 0) / 100)], ["reuse", "—"],
     ] });
   }
   if (curT) {
     const cw = curT.cache_write || 0, ci = curT.input || 0, cr = curT.cache_read || 0, inSide = cw + ci + cr;
     rows.push({ name: "Cursor", color: colorOf["Cursor"] || "#a78bfa", stats: [
-      ["$", fmtUSD(curT.cost_usd)], ["input", fmtTokens(ci)], ["output", fmtTokens(curT.output)], ["cache read", fmtTokens(cr)],
+      ["cost", fmtUSD(curT.cost_usd)], ["input", fmtTokens(ci)], ["output", fmtTokens(curT.output)], ["cache read", fmtTokens(cr)],
       ["hit", pct(inSide ? cr / inSide : 0)], ["reuse", cw ? (cr / cw).toFixed(1) + "×" : "—"],
     ] });
   }
