@@ -193,6 +193,16 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
     </div>
   </div>
 
+  <!-- Cross-tool total (equivalent API $, the one comparable unit). -->
+  <div class="panel" id="overviewPanel" style="display:none">
+    <h2><span id="overviewTitle">Total Usage</span></h2>
+    <div class="grid cols-4" id="overviewCards"></div>
+    <div class="surface-bar" id="overviewBar" style="margin-bottom:0"></div>
+    <div style="color:var(--muted);font-size:11px;margin-top:8px">
+      Equivalent API $ across tools (ccusage already prices Claude at Anthropic API rates; Codex CLI &amp; Cursor priced the same way). Tokens aren't summed — ccusage's total is inflated by cache reads, so it isn't comparable across tools. Codex cloud is a credit-percent distribution and isn't included in $.
+    </div>
+  </div>
+
   <!-- Per-tool tabs. Month filter applies to all; Source/Project/model toggle are Claude-only. -->
   <div class="tabs" id="toolTabs">
     <button class="tab-btn active" data-tab="claude">Claude</button>
@@ -1325,8 +1335,55 @@ function renderCursor() {
 }
 
 // ---------- Master render ----------
+// ---------- Rendering: cross-tool overview ----------
+function renderOverview() {
+  const panel = document.getElementById("overviewPanel");
+  const month = state.filters.month;
+  // Claude $ respects the Source toggle (direct/relay/combined) via state.daily.
+  const cDays = month ? state.daily.filter(d => d.month === month) : state.daily;
+  let claudeCost = cDays.reduce((s, d) => s + d.cost, 0);
+  let claudeTok = cDays.reduce((s, d) => s + d.total, 0);
+  if (!cDays.length && month) { const m = state.monthly.find(x => x.month === month); if (m) { claudeCost = m.cost; claudeTok = m.total; } }
+  const hasClaude = cDays.length > 0 || claudeCost > 0;
+
+  const codexM = state.codex.cli && state.codex.cli.monthly && state.codex.cli.monthly.totals;
+  const codexCost = codexM ? codexM.cost_usd : null;
+  const codexPartial = codexM && (state.codex.cli.monthly.unpriced_models || []).length;
+  const curT = state.cursorCost && state.cursorCost.totals;
+  const curCost = curT ? curT.cost_usd : null;
+  const curPartial = curT && (state.cursorCost.unpriced_models || []).length;
+
+  if (!hasClaude && codexCost == null && curCost == null) { panel.style.display = "none"; return; }
+  panel.style.display = "";
+  document.getElementById("overviewTitle").textContent = "Total Usage" + (month ? " — " + monthLabel(month) : "");
+
+  const total = (hasClaude ? claudeCost : 0) + (codexCost || 0) + (curCost || 0);
+  const anyPartial = codexPartial || curPartial;
+  const cards = [
+    { label: "Total Equiv. $", value: (anyPartial ? "~" : "") + fmtUSD(total), sub: "across tools · cloud excl." },
+    { label: "Claude", value: hasClaude ? fmtUSD(claudeCost) : "—", sub: hasClaude ? fmtTokens(claudeTok) + " tok" : "not loaded" },
+    { label: "Codex CLI", value: codexCost != null ? (codexPartial ? "~" : "") + fmtUSD(codexCost) : "—", sub: codexM ? fmtTokens(codexM.total) + " tok" : "not loaded" },
+    { label: "Cursor", value: curCost != null ? (curPartial ? "~" : "") + fmtUSD(curCost) : "—", sub: curT ? fmtTokens(curT.total_tokens) + " tok" : "not loaded" },
+  ];
+  document.getElementById("overviewCards").innerHTML = cards.map(c =>
+    `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join("");
+
+  const segs = [
+    { name: "Claude", v: hasClaude ? claudeCost : 0 },
+    { name: "Codex", v: codexCost || 0 },
+    { name: "Cursor", v: curCost || 0 },
+  ].filter(s => s.v > 0);
+  const sum = segs.reduce((a, s) => a + s.v, 0) || 1;
+  const colors = palette(Math.max(segs.length, 1));
+  document.getElementById("overviewBar").innerHTML = segs.map((s, i) => {
+    const p = s.v / sum * 100;
+    return `<span style="width:${p}%;background:${colors[i]}" title="${s.name}: ${fmtUSD(s.v)} (${p.toFixed(1)}%)">${p >= 10 ? s.name + " " + p.toFixed(0) + "%" : ""}</span>`;
+  }).join("");
+}
+
 function render() {
   refreshFilters();
+  renderOverview();
   // Render only the active tab so Chart.js sizes canvases against a visible
   // container (a chart built inside display:none collapses to 0 height).
   if (state.activeTab === "claude") {
