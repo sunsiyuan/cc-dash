@@ -1,0 +1,14 @@
+# Credentials for bin/import-codex-cloud.sh — copy to .auth.sh (gitignored) and fill in.
+#
+# How to get these:
+#   1. Log in to chatgpt.com, open https://chatgpt.com/codex/cloud/settings/analytics
+#   2. DevTools (F12) → Network → Fetch/XHR → refresh the page
+#   3. Right-click the "daily-token-usage-breakdown" request → Copy → Copy as cURL
+#   4. From that command, copy the value after "authorization: Bearer " into BEARER,
+#      and the entire -b/--cookie string into COOKIE.
+#
+# Both are short-lived: the Bearer expires (~days) and the cf_* cookies sooner.
+# When import-codex-cloud.sh returns HTTP 401/403, re-copy fresh values here.
+
+export CODEX_CLOUD_BEARER='PASTE_THE_BEARER_JWT_HERE'
+export CODEX_CLOUD_COOKIE='PASTE_THE_FULL_COOKIE_STRING_HERE'

@@ -3,6 +3,14 @@
 # data/index.json is tracked so the monthly refresh leaves a `git log` audit trail.
 data/*
 !data/index.json
+# Codex per-model rate table is config (not usage data) — keep it tracked so
+# edits to pricing survive a data/ wipe and leave a git audit trail.
+!data/codex
+data/codex/*
+!data/codex/pricing.json
+!data/codex/cloud
+data/codex/cloud/*
+!data/codex/cloud/.auth.sh.example
 
 # OS / editor cruft
 .DS_Store

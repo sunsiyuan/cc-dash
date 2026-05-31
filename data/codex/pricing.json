@@ -1,0 +1,13 @@
+{
+  "_comment": "USD per 1,000,000 tokens. uncached_input = input - cached_input. output includes reasoning tokens. Unknown models are counted but left uncosted (listed under unpriced_models in the output).",
+  "_source": "https://developers.openai.com/api/docs/models/gpt-5.5 (gpt-5.5, 2026-06)",
+  "models": {
+    "gpt-5.5":        { "input": 5.00, "cached_input": 0.50, "output": 30.00 },
+    "gpt-5.5-codex":  { "input": 5.00, "cached_input": 0.50, "output": 30.00 },
+    "gpt-5":          { "input": 1.25, "cached_input": 0.125, "output": 10.00 },
+    "gpt-5-codex":    { "input": 1.25, "cached_input": 0.125, "output": 10.00 },
+    "gpt-5.1":        { "input": 1.25, "cached_input": 0.125, "output": 10.00 },
+    "o3":             { "input": 2.00, "cached_input": 0.50, "output": 8.00 },
+    "o4-mini":        { "input": 1.10, "cached_input": 0.275, "output": 4.40 }
+  }
+}
