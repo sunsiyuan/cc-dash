@@ -56,8 +56,9 @@
   .topbar h1 { margin: 0; }
   .topbar .brand { display: flex; align-items: baseline; gap: 10px; }
   .topbar .brand .tag { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: 0.01em; }
-  #themeToggle { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 7px 16px; cursor: pointer; font-size: 13px; font-weight: 600; }
-  #themeToggle:hover { color: var(--text); border-color: var(--accent); }
+  .topbar-actions { display: flex; gap: 8px; }
+  #themeToggle, #langToggle { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); border-radius: 999px; padding: 7px 16px; cursor: pointer; font-size: 13px; font-weight: 600; }
+  #themeToggle:hover, #langToggle:hover { color: var(--text); border-color: var(--accent); }
   h1, h2, h3 { margin: 0 0 12px; }
   h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.025em; }
   h2 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin-top: 0; }
@@ -161,9 +162,12 @@
   <div class="topbar">
     <div class="brand">
       <h1>cc-dash</h1>
-      <span class="tag">Claude · Codex · Cursor — usage &amp; equivalent API&nbsp;$</span>
+      <span class="tag" data-i18n="tagline">Claude · Codex · Cursor — usage &amp; equivalent API&nbsp;$</span>
     </div>
-    <button id="themeToggle" title="Toggle light / dark">🌙 Dark</button>
+    <div class="topbar-actions">
+      <button id="langToggle" title="Switch language">中文</button>
+      <button id="themeToggle" title="Toggle light / dark">🌙 Dark</button>
+    </div>
   </div>
 
   <div class="panel">
@@ -375,6 +379,75 @@ npx ccusage@latest session --json &gt; session.json</code></pre>
 <script>
 "use strict";
 
+// ---------- i18n ----------
+const LANG_KEY = "cc_dash_lang";
+let lang = "en";
+const I18N = {
+  en: {
+    tagline: "Claude · Codex · Cursor — usage & equivalent API $",
+    howExport: "How to export data from ccusage",
+    loadData: "Load Data", loadBundled: "Load bundled data", loadAll: "Load all months",
+    uploadManual: "Or upload JSON files manually:", clearAll: "Clear all", loadedFromCache: "Loaded from cache", optional: "optional",
+    filters: "Filters", source: "Source", month: "Month", project: "Project", breakdownModel: "Break down by model",
+    srcdirect: "Direct (ccusage)", srcrelay: "Relay", srccombined: "Combined",
+    dailyTrendMonth: "Daily Trend — Selected Month", monthlyTrend: "Monthly Trend — Total Tokens & Cost",
+    cacheMgmt: "Cache & Context Management",
+    dailyHitRate: "Daily Cache Hit Rate", perProjectCache: "Per-Project Cache Efficiency", insights: "Insights",
+    byModel: "By Model", topProjects: "Top Projects",
+    cursorActivity: "Cursor Activity", dailyActivity: "Daily Activity", topDays: "Top Days by Total Tokens",
+    dailyTrend: "Daily Trend", codexCloud: "Codex Cloud — Usage Breakdown", codeReview: "Code Review",
+    totalUsage: "Total Usage", totalTokens: "Total Tokens", costUSD: "Cost (USD)", cacheHitPct: "Cache Hit %", reuseX: "Reuse ×",
+    sessions: "Sessions", equivAPI: "Equiv. API $", cacheHitRate: "Cache Hit Rate", events: "Events",
+    prsReviewed: "PRs Reviewed", comments: "Comments", bySeverity: "By Severity", surfaceLeader: "Surface Leader",
+    notLoaded: "not loaded", tokUnit: "tok",
+    statCost: "cost", statInput: "input", statOutput: "output", statCacheRead: "cache read", statCached: "cached", statHit: "hit", statReuse: "reuse",
+    claudeDirect: "Claude direct", claudeRelay: "Claude relay", claudeOnly: "Claude",
+    totalsOf: (m) => `${m} Totals`, noMonthTotals: "Totals (no month selected)",
+    inMonth: (m) => `in ${m}`, allMonths: "all months",
+    loading: "Loading…", themeDark: "Dark", themeLight: "Light", langName: "中文",
+  },
+  zh: {
+    tagline: "Claude · Codex · Cursor —— 用量与等效 API 费用",
+    howExport: "如何从 ccusage 导出数据",
+    loadData: "加载数据", loadBundled: "加载打包数据", loadAll: "加载所有月份",
+    uploadManual: "或手动上传 JSON 文件：", clearAll: "清空", loadedFromCache: "已从缓存加载", optional: "可选",
+    filters: "筛选", source: "来源", month: "月份", project: "项目", breakdownModel: "按模型拆分",
+    srcdirect: "直连 (ccusage)", srcrelay: "中转", srccombined: "合并",
+    dailyTrendMonth: "每日趋势 — 所选月份", monthlyTrend: "月度趋势 — 总 Token 与费用",
+    cacheMgmt: "缓存与上下文管理",
+    dailyHitRate: "每日缓存命中率", perProjectCache: "各项目缓存效率", insights: "洞察",
+    byModel: "按模型", topProjects: "项目排行",
+    cursorActivity: "Cursor 活动", dailyActivity: "每日活动", topDays: "按总 Token 的高峰日",
+    dailyTrend: "每日趋势", codexCloud: "Codex Cloud — 用量分布", codeReview: "代码审查",
+    totalUsage: "总用量", totalTokens: "总 Token", costUSD: "费用 (USD)", cacheHitPct: "缓存命中率", reuseX: "复用 ×",
+    sessions: "会话数", equivAPI: "等效 API $", cacheHitRate: "缓存命中率", events: "事件数",
+    prsReviewed: "审查 PR", comments: "评论数", bySeverity: "按等级", surfaceLeader: "主力 surface",
+    notLoaded: "未加载", tokUnit: "tok",
+    statCost: "费用", statInput: "输入", statOutput: "输出", statCacheRead: "缓存读", statCached: "缓存", statHit: "命中", statReuse: "复用",
+    claudeDirect: "Claude 直连", claudeRelay: "Claude 中转", claudeOnly: "Claude",
+    totalsOf: (m) => `${m} 合计`, noMonthTotals: "合计（未选月份）",
+    inMonth: (m) => `${m}`, allMonths: "全部月份",
+    loading: "加载中…", themeDark: "暗色", themeLight: "亮色", langName: "EN",
+  },
+};
+function t(key, ...args) {
+  const d = I18N[lang] || I18N.en;
+  let v = d[key];
+  if (v == null) v = I18N.en[key];
+  if (v == null) return key;
+  return typeof v === "function" ? v(...args) : v;
+}
+function localeTag() { return lang === "zh" ? "zh-CN" : undefined; }
+function applyLang(l) {
+  lang = (l === "zh") ? "zh" : "en";
+  document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
+  const lb = document.getElementById("langToggle"); if (lb) lb.textContent = t("langName");
+  const theme = document.documentElement.getAttribute("data-theme");
+  const tb = document.getElementById("themeToggle");
+  if (tb) tb.textContent = (theme === "light" ? "☀️ " : "🌙 ") + t(theme === "light" ? "themeLight" : "themeDark");
+}
+
 // ---------- Constants ----------
 const STORAGE_KEY = "ccusage_dashboard_v1";
 const TODAY = new Date(); // for picking default featured month
@@ -457,7 +530,7 @@ function monthLabel(m) {
   if (!m) return "";
   const [y, mo] = m.split("-").map(Number);
   if (!y || !mo) return m;
-  return new Date(y, mo - 1, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
+  return new Date(y, mo - 1, 1).toLocaleString(localeTag(), { month: "long", year: "numeric" });
 }
 function projectFromPath(p) {
   if (!p) return "(unknown)";
@@ -850,7 +923,7 @@ function renderMonthlyChart() {
     data = Array.from(m.values());
   }
   data.sort((a, b) => a.month.localeCompare(b.month));
-  const t = chartTheme();
+  const cth = chartTheme();
 
   if (state.filters.breakdownByModel) {
     // Stacked bar by model totals; aggregate model totals across months
@@ -883,7 +956,7 @@ function renderMonthlyChart() {
           { type: "line", label: t("costUSD"), data: data.map(d => d.cost), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 3 },
         ],
       },
-      options: dualAxisOptions(t),
+      options: dualAxisOptions(cth),
     });
   }
 }
@@ -892,9 +965,9 @@ function renderDailyChart() {
   destroyChart("daily");
   const ctx = document.getElementById("dailyChart").getContext("2d");
   const days = filteredDaily().slice().sort((a, b) => a.date.localeCompare(b.date));
-  const t = chartTheme();
+  const cth = chartTheme();
   if (!days.length) {
-    charts.daily = new Chart(ctx, { data: { labels: [], datasets: [] }, options: dualAxisOptions(t) });
+    charts.daily = new Chart(ctx, { data: { labels: [], datasets: [] }, options: dualAxisOptions(cth) });
     return;
   }
   if (state.filters.breakdownByModel) {
@@ -927,7 +1000,7 @@ function renderDailyChart() {
           { type: "line", label: t("costUSD"), data: days.map(d => d.cost), borderColor: "#fbbf24", backgroundColor: "#fbbf24", yAxisID: "y1", tension: 0.25, pointRadius: 2 },
         ],
       },
-      options: dualAxisOptions(t),
+      options: dualAxisOptions(cth),
     });
   }
 }
@@ -947,7 +1020,7 @@ function renderModelChart() {
   const labels = entries.map(e => e[0]);
   const data = entries.map(e => e[1]);
   const colors = palette(labels.length);
-  const t = chartTheme();
+  const cth = chartTheme();
   charts.model = new Chart(ctx, {
     type: "bar",
     data: { labels, datasets: [{ label: t("totalTokens"), data, backgroundColor: colors }] },
@@ -955,14 +1028,14 @@ function renderModelChart() {
       indexAxis: "y", maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtTokens(c.parsed.x) } } },
       scales: {
-        x: { ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid } },
-        y: { ticks: { color: t.tick }, grid: { color: t.grid } },
+        x: { ticks: { color: cth.tick, callback: v => fmtTokens(v) }, grid: { color: cth.grid } },
+        y: { ticks: { color: cth.tick }, grid: { color: cth.grid } },
       },
     },
   });
 }
 
-function dualAxisOptions(t) {
+function dualAxisOptions(cth) {
   return {
     maintainAspectRatio: false,
     plugins: {
@@ -973,14 +1046,14 @@ function dualAxisOptions(t) {
       } } },
     },
     scales: {
-      x: { ticks: { color: t.tick }, grid: { color: t.grid } },
-      y: { position: "left", ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid }, title: { text: "Tokens", color: t.tick, display: true } },
-      y1: { position: "right", ticks: { color: t.tick, callback: v => "$" + v }, grid: { drawOnChartArea: false }, title: { text: "USD", color: t.tick, display: true } },
+      x: { ticks: { color: cth.tick }, grid: { color: cth.grid } },
+      y: { position: "left", ticks: { color: cth.tick, callback: v => fmtTokens(v) }, grid: { color: cth.grid }, title: { text: "Tokens", color: cth.tick, display: true } },
+      y1: { position: "right", ticks: { color: cth.tick, callback: v => "$" + v }, grid: { drawOnChartArea: false }, title: { text: "USD", color: cth.tick, display: true } },
     },
   };
 }
 function stackedDualAxisOptions(t) {
-  const o = dualAxisOptions(t);
+  const o = dualAxisOptions(cth);
   o.scales.x.stacked = true;
   o.scales.y.stacked = true;
   return o;
@@ -1110,7 +1183,7 @@ function renderCacheAnalysis() {
   // Daily hit-rate chart
   destroyChart("cacheRate");
   const ctx = document.getElementById("cacheRateChart").getContext("2d");
-  const t = chartTheme();
+  const cth = chartTheme();
   const sortedDays = [...days].sort((a, b) => a.date.localeCompare(b.date));
   const labels = sortedDays.map(d => d.date.slice(5));
   const rates = sortedDays.map(d => {
@@ -1135,8 +1208,8 @@ function renderCacheAnalysis() {
         tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
       },
       scales: {
-        x: { ticks: { color: t.tick }, grid: { color: t.grid } },
-        y: { ticks: { color: t.tick, callback: v => v + "%" }, grid: { color: t.grid }, suggestedMin: 0, suggestedMax: 100 },
+        x: { ticks: { color: cth.tick }, grid: { color: cth.grid } },
+        y: { ticks: { color: cth.tick, callback: v => v + "%" }, grid: { color: cth.grid }, suggestedMin: 0, suggestedMax: 100 },
       },
     },
   });
@@ -1297,7 +1370,7 @@ function renderCursor() {
   ).join("");
 
   // Aggregate by day for the daily chart
-  const t = chartTheme();
+  const cth = chartTheme();
   const byDay = new Map();
   events.forEach(e => {
     const cur = byDay.get(e.date) || { date: e.date, events: 0, total: 0 };
@@ -1323,9 +1396,9 @@ function renderCursor() {
         tooltip: { callbacks: { label: c => c.dataset.yAxisID === "y" ? `Tokens: ${fmtTokens(c.parsed.y)}` : `Events: ${c.parsed.y}` } },
       },
       scales: {
-        x: { ticks: { color: t.tick }, grid: { color: t.grid } },
-        y: { position: "left", ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid }, title: { text: "Tokens", color: t.tick, display: true } },
-        y1: { position: "right", ticks: { color: t.tick }, grid: { drawOnChartArea: false }, title: { text: "Events", color: t.tick, display: true }, beginAtZero: true },
+        x: { ticks: { color: cth.tick }, grid: { color: cth.grid } },
+        y: { position: "left", ticks: { color: cth.tick, callback: v => fmtTokens(v) }, grid: { color: cth.grid }, title: { text: "Tokens", color: cth.tick, display: true } },
+        y1: { position: "right", ticks: { color: cth.tick }, grid: { drawOnChartArea: false }, title: { text: "Events", color: cth.tick, display: true }, beginAtZero: true },
       },
     },
   });
@@ -1356,8 +1429,8 @@ function renderCursor() {
         } } },
       },
       scales: {
-        x: { ticks: { color: t.tick, callback: v => fmtTokens(v) }, grid: { color: t.grid } },
-        y: { ticks: { color: t.tick }, grid: { color: t.grid } },
+        x: { ticks: { color: cth.tick, callback: v => fmtTokens(v) }, grid: { color: cth.grid } },
+        y: { ticks: { color: cth.tick }, grid: { color: cth.grid } },
       },
     },
   });
@@ -1413,12 +1486,7 @@ function renderOverview() {
 
   // 总: one hero row for the cross-tool total.
   const total = (hasClaude ? claudeCost : 0) + (codexCost || 0) + (curCost || 0);
-  const nTools = [hasClaude, codexCost != null, curCost != null].filter(Boolean).length;
-  const relayMeta = (hasRelay && state.filters.source === "combined") ? " · incl. relay" : "";
-  document.getElementById("overviewTotal").innerHTML =
-    `<span class="label">Total Equivalent API $ · ${monthLabel(month)}</span>` +
-    `<span class="big">${fmtUSD(total)}</span>` +
-    `<span class="meta">across ${nTools} tool${nTools === 1 ? "" : "s"}${relayMeta}</span>`;
+  document.getElementById("overviewTotal").innerHTML = `<span class="big">${fmtUSD(total)}</span>`;
 
   // 分: one card per tool.
   const tok = (n) => `<span class="tok">${fmtTokens(n)}</span> ${t("tokUnit")}`;
@@ -1430,19 +1498,9 @@ function renderOverview() {
   document.getElementById("overviewCards").innerHTML = cards.map(c =>
     `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join("");
 
-  const segs = [
-    { name: "Claude", v: hasClaude ? claudeCost : 0 },
-    { name: "Codex", v: codexCost || 0 },
-    { name: "Cursor", v: curCost || 0 },
-  ].filter(s => s.v > 0);
-  const sum = segs.reduce((a, s) => a + s.v, 0) || 1;
-  const colors = palette(Math.max(segs.length, 1));
-  const colorOf = {};
-  segs.forEach((s, i) => { colorOf[s.name] = colors[i]; });
-  document.getElementById("overviewBar").innerHTML = segs.map(s => {
-    const p = s.v / sum * 100;
-    return `<span style="width:${p}%;background:${colorOf[s.name]}" title="${s.name}: ${fmtUSD(s.v)} (${p.toFixed(1)}%)">${p >= 10 ? s.name + " " + p.toFixed(0) + "%" : ""}</span>`;
-  }).join("");
+  // Colors for the per-tool detail dots.
+  const colors = palette(3);
+  const colorOf = { Claude: colors[0], Codex: colors[1], Cursor: colors[2] };
 
   // Per-tool key numbers (input / output / cache / hit / reuse) right in the summary.
   const claudeColor = colorOf["Claude"] || "#7c9cff";
@@ -1773,7 +1831,7 @@ const THEME_KEY = "cc_dash_theme";
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = theme === "light" ? "☀️ Light" : "🌙 Dark";
+  if (btn) btn.textContent = (theme === "light" ? "☀️ " : "🌙 ") + t(theme === "light" ? "themeLight" : "themeDark");
 }
 function initTheme() {
   let t = "dark";
@@ -1787,8 +1845,21 @@ document.getElementById("themeToggle").addEventListener("click", () => {
   render();  // re-render the active tab's charts with the new theme colors
 });
 
+document.getElementById("langToggle").addEventListener("click", () => {
+  const next = lang === "zh" ? "en" : "zh";
+  applyLang(next);
+  try { localStorage.setItem(LANG_KEY, next); } catch { /* ignore */ }
+  render();
+});
+function initLang() {
+  let saved = "en";
+  try { saved = localStorage.getItem(LANG_KEY) || "en"; } catch { /* ignore */ }
+  applyLang(saved);
+}
+
 // ---------- Init ----------
 initTheme();
+initLang();
 loadCache();
 render();
 discoverBundledMonths();
